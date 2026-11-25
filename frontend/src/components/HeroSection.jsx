@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import {
   AlertTriangle,
+  Check,
   CheckCircle2,
   Clock,
   Droplets,
   Palette,
+  Pencil,
   RefreshCw,
   Sparkles,
   Wrench,
+  X,
 } from 'lucide-react';
 import RobotMascot from './RobotMascot';
 import { formatCountdown } from '../utils/date';
@@ -51,6 +54,7 @@ export default function HeroSection({
   dashboard,
   onQuickComplete,
   onOpenTask,
+  onRenameRobot,
   busyTaskId,
 }) {
   const {
@@ -67,6 +71,28 @@ export default function HeroSection({
   const [previewMood, setPreviewMood] = useState(null);
   const [showDesignerBar, setShowDesignerBar] = useState(false);
   const [svgCacheBust, setSvgCacheBust] = useState(0);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [savingName, setSavingName] = useState(false);
+
+  const startEditingName = () => {
+    setNameDraft(robotName || '');
+    setEditingName(true);
+  };
+
+  const handleRenameSubmit = async (e) => {
+    e.preventDefault();
+    if (!onRenameRobot || savingName) return;
+    setSavingName(true);
+    try {
+      await onRenameRobot(nameDraft);
+      setEditingName(false);
+    } catch {
+      // Toast is shown by parent
+    } finally {
+      setSavingName(false);
+    }
+  };
 
   const displayedMood = previewMood || mood;
   const style = MOOD_STYLES[displayedMood] || MOOD_STYLES.happy;
@@ -168,9 +194,76 @@ export default function HeroSection({
           </div>
 
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-stone-900 sm:text-3xl dark:text-white">
-              {robotName}
-            </h2>
+            {editingName ? (
+              <form
+                onSubmit={handleRenameSubmit}
+                className="flex items-center justify-center gap-1.5 lg:justify-start"
+              >
+                <input
+                  type="text"
+                  maxLength={80}
+                  autoFocus
+                  disabled={savingName}
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setEditingName(false);
+                    }
+                  }}
+                  placeholder="Give your robot a cute name..."
+                  aria-label="Robot name"
+                  className="w-full max-w-xs rounded-xl border border-teal-400 bg-white px-3 py-1.5 text-lg font-bold text-stone-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-teal-500/40 dark:border-teal-600 dark:bg-slate-900 dark:text-white"
+                />
+                <button
+                  type="submit"
+                  disabled={savingName}
+                  aria-label="Save robot name"
+                  title="Save name"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-600 text-white shadow-xs transition hover:bg-teal-700 disabled:opacity-50"
+                >
+                  <Check className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  disabled={savingName}
+                  onClick={() => setEditingName(false)}
+                  aria-label="Cancel rename"
+                  title="Cancel"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition hover:bg-stone-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </form>
+            ) : (
+              <div className="flex flex-wrap items-center justify-center gap-2 lg:justify-start">
+                <h2
+                  onClick={onRenameRobot ? startEditingName : undefined}
+                  title={onRenameRobot ? 'Click to rename your robot' : undefined}
+                  className={`text-2xl font-bold tracking-tight text-stone-900 sm:text-3xl dark:text-white ${
+                    onRenameRobot ? 'cursor-pointer hover:text-teal-700 dark:hover:text-teal-300' : ''
+                  }`}
+                >
+                  {robotName}
+                </h2>
+                {onRenameRobot && (
+                  <button
+                    type="button"
+                    onClick={startEditingName}
+                    title="Rename your robot"
+                    aria-label="Rename your robot"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200/80 bg-white/70 text-stone-500 transition hover:bg-white hover:text-teal-700 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                {robotName !== 'Deebot T90 PRO OMNI' && (
+                  <span className="rounded-md bg-stone-900/5 px-2 py-0.5 text-[11px] font-semibold tracking-wide text-stone-500 dark:bg-white/10 dark:text-slate-400">
+                    DEEBOT T90 PRO OMNI
+                  </span>
+                )}
+              </div>
+            )}
             <p className="mt-1.5 text-sm leading-relaxed text-stone-600 sm:text-base dark:text-slate-300">
               {moodSubtitle}
             </p>
@@ -291,7 +384,7 @@ export default function HeroSection({
                   className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-50 dark:bg-teal-500 dark:hover:bg-teal-600"
                 >
                   <Wrench className="h-3.5 w-3.5" />
-                  {nextUpcoming.action_type === 'REPLACE' ? 'Mark Replaced' : 'Mark Cleaned'}
+                  {nextUpcoming.action_type === 'REPLACE' ? 'Mark replaced' : 'Mark cleaned'}
                 </button>
               </div>
             </div>

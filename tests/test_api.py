@@ -42,6 +42,21 @@ def test_auto_seed_and_idempotency(client):
     assert main_brush_inv["in_stock"] == 1
     assert main_brush_inv["is_low_stock"] is True
 
+    # Cleaning solution starts at 1 bottle with threshold 0 (not low stock, non-official)
+    solution_inv = next(
+        i for i in data["inventory"] if i["slug"] == "cleaning_solution"
+    )
+    assert solution_inv["name"] == "Cleaning Solution"
+    assert solution_inv["in_stock"] == 1
+    assert solution_inv["low_stock_threshold"] == 0
+    assert solution_inv["is_low_stock"] is False
+    assert "official" not in solution_inv["notes"].lower()
+
+    solution_task = next(
+        t for t in data["tasks"] if t["slug"] == "cleaning_solution_reservoir"
+    )
+    assert "official" not in solution_task["instructions"].lower()
+
     # Calling init_db again should not duplicate rows
     init_db()
     res2 = client.get("/api/dashboard")
@@ -81,14 +96,14 @@ def test_dual_track_clean_vs_replace_and_undo(client):
     assert updated_roller["replace_cycle"]["last_at"] == initial_replace_last
     assert updated_roller["clean_cycle"]["percent_elapsed"] > 30.0
 
-    # Now log REPLACE -> updates BOTH clean and replace timers, decrements stock by 1
+    # Now log REPLACE -> updates BOTH clean and replace timers, leaves stock untouched
     replace_res = client.post(
         f"/api/tasks/{task_id}/complete",
         json={"action_type": "REPLACE", "notes": "Installed fresh roller"},
     )
     assert replace_res.status_code == 200
     replace_payload = replace_res.json()
-    assert replace_payload["stock_decremented"] is True
+    assert replace_payload["stock_decremented"] is False
     replace_log_id = replace_payload["log_id"]
 
     after_replace = next(
@@ -96,11 +111,11 @@ def test_dual_track_clean_vs_replace_and_undo(client):
         for t in replace_payload["dashboard"]["tasks"]
         if t["id"] == task_id
     )
-    assert after_replace["inventory"]["in_stock"] == initial_stock - 1
+    assert after_replace["inventory"]["in_stock"] == initial_stock
     assert after_replace["clean_cycle"]["percent_elapsed"] < 5.0
     assert after_replace["replace_cycle"]["percent_elapsed"] < 5.0
 
-    # Undo the REPLACE log -> restores stock (+1) and prior clean/replace timestamps
+    # Undo the REPLACE log -> restores prior clean/replace timestamps and leaves stock untouched
     undo_res = client.delete(f"/api/logs/{replace_log_id}")
     assert undo_res.status_code == 200
     after_undo = next(
@@ -432,3 +447,102 @@ def test_env_password_override(tmp_path, monkeypatch):
             c.post("/api/auth/password", json={"new_password": "other"}).status_code
             == 400
         )
+
+
+def test_cleaning_solution_low_stock_threshold(client):
+    dash = client.get("/api/dashboard").json()
+    solution = next(
+        i for i in dash["inventory"] if i["slug"] == "cleaning_solution"
+    )
+    assert solution["in_stock"] == 1
+    assert solution["is_low_stock"] is False
+
+    # Decrementing from 1 to 0 triggers low stock
+    upd_res = client.patch(
+        f"/api/inventory/{solution['id']}",
+        json={"delta": -1},
+    )
+    assert upd_res.status_code == 200
+    after = next(
+        i for i in upd_res.json()["inventory"] if i["id"] == solution["id"]
+    )
+    assert after["in_stock"] == 0
+    assert after["is_low_stock"] is True
+
+
+def test_migrate_existing_defaults_idempotent(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEEBOT_DB_PATH", str(tmp_path / "legacy_deebot.db"))
+    init_db()
+
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            UPDATE inventory
+            SET name = 'Official ECOVACS Cleaning Solution',
+                low_stock_threshold = 1,
+                notes = 'Use official low-foam ECOVACS floor cleaning solution only'
+            WHERE slug = 'cleaning_solution'
+            """
+        )
+        conn.execute(
+            """
+            UPDATE tasks
+            SET instructions = 'Open the station dust collection cover and check the solution tank level; top up with official ECOVACS cleaning solution.'
+            WHERE slug = 'cleaning_solution_reservoir'
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Re-running init_db migrates the legacy defaults
+    init_db()
+    conn = get_connection()
+    try:
+        inv = conn.execute(
+            "SELECT name, low_stock_threshold, notes FROM inventory WHERE slug = 'cleaning_solution'"
+        ).fetchone()
+        assert inv["name"] == "Cleaning Solution"
+        assert inv["low_stock_threshold"] == 0
+        assert "official" not in inv["notes"].lower()
+
+        task = conn.execute(
+            "SELECT instructions FROM tasks WHERE slug = 'cleaning_solution_reservoir'"
+        ).fetchone()
+        assert "official" not in task["instructions"].lower()
+
+        # Subsequent user customizations must not be overwritten by init_db()
+        conn.execute(
+            """
+            UPDATE inventory
+            SET low_stock_threshold = 2,
+                notes = 'My favorite floor cleaner'
+            WHERE slug = 'cleaning_solution'
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    init_db()
+    conn = get_connection()
+    try:
+        inv2 = conn.execute(
+            "SELECT low_stock_threshold, notes FROM inventory WHERE slug = 'cleaning_solution'"
+        ).fetchone()
+        assert inv2["low_stock_threshold"] == 2
+        assert inv2["notes"] == "My favorite floor cleaner"
+    finally:
+        conn.close()
+
+
+def test_custom_robot_name_in_dashboard_and_mood_subtitle(client):
+    save_res = client.post("/api/settings", json={"robot_name": "Sparky"})
+    assert save_res.status_code == 200
+    assert save_res.json()["robot_name"] == "Sparky"
+
+    dash = client.get("/api/dashboard").json()
+    assert dash["robot_name"] == "Sparky"
+    assert dash["mood"] == "happy"
+    assert "Sparky" in dash["mood_subtitle"]

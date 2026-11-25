@@ -43,11 +43,11 @@ INITIAL_INVENTORY = [
     },
     {
         "slug": "cleaning_solution",
-        "name": "Official ECOVACS Cleaning Solution",
+        "name": "Cleaning Solution",
         "unit_label": "bottles",
-        "in_stock": 2,
-        "low_stock_threshold": 1,
-        "notes": "Use official low-foam ECOVACS floor cleaning solution only",
+        "in_stock": 1,
+        "low_stock_threshold": 0,
+        "notes": "Low-foam floor cleaning solution safe for robot mops",
     },
 ]
 
@@ -229,7 +229,7 @@ INITIAL_TASKS = [
         "icon": "flask",
         "instructions": (
             "Open the station dust collection cover and check the solution tank level; "
-            "top up with official ECOVACS cleaning solution."
+            "top up with low-foam robot floor cleaning solution."
         ),
     },
     {

@@ -212,16 +212,21 @@ export default function SettingsModal({
                   <>
                     <label className="block text-xs">
                       <span className="font-semibold text-stone-700 dark:text-slate-200">
-                        Robot Nickname
+                        Robot Name
                       </span>
                       <input
                         type="text"
+                        maxLength={80}
+                        placeholder="e.g., Rosie, Wall-E, Dusty..."
                         value={form.robot_name}
                         onChange={(e) =>
                           setForm({ ...form, robot_name: e.target.value })
                         }
                         className="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
                       />
+                      <span className="mt-1 block text-[11px] text-stone-500 dark:text-slate-400">
+                        Leave blank to reset to Deebot T90 PRO OMNI.
+                      </span>
                     </label>
 
                     {/* Webhook notifications */}

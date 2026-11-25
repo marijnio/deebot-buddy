@@ -183,6 +183,7 @@ def _determine_mood(
     overdue_count: int,
     due_soon_count: int,
     dirty_water_overdue: bool,
+    robot_name: str = "Deebot T90 PRO OMNI",
 ) -> tuple[str, str, str]:
     if overdue_count >= 3 or dirty_water_overdue:
         if dirty_water_overdue and overdue_count < 3:
@@ -204,10 +205,15 @@ def _determine_mood(
             "Content & Ready",
             f"Getting close to tidy-up time ({due_soon_count} {noun} due soon).",
         )
+    happy_subject = (
+        "Your Deebot T90 PRO OMNI"
+        if robot_name == "Deebot T90 PRO OMNI"
+        else robot_name
+    )
     return (
         "happy",
         "Sparkling & Happy",
-        "All systems gleaming! Your DEEBOT T90 PRO OMNI is living its best life.",
+        f"All systems gleaming! {happy_subject} is living its best life.",
     )
 
 
@@ -297,8 +303,11 @@ def build_dashboard(
     )
     low_stock_count = sum(1 for i in inventory if i["is_low_stock"])
 
+    settings = get_settings_dict(conn)
+    robot_name = settings.get("robot_name", "Deebot T90 PRO OMNI")
+
     mood, mood_label, mood_subtitle = _determine_mood(
-        overdue_count, due_soon_count, dirty_water_overdue
+        overdue_count, due_soon_count, dirty_water_overdue, robot_name
     )
     health_score = _compute_health_score(tasks, overdue_count, dirty_water_overdue)
 
@@ -341,11 +350,10 @@ def build_dashboard(
     ).fetchall()
 
     recent_logs = [dict(r) for r in recent_log_rows]
-    settings = get_settings_dict(conn)
 
     return {
         "generated_at": to_iso(current_time),
-        "robot_name": settings.get("robot_name", "Deebot T90 PRO OMNI"),
+        "robot_name": robot_name,
         "health_score": health_score,
         "mood": mood,
         "mood_label": mood_label,
@@ -486,27 +494,7 @@ def complete_task(
 
     performed_iso = to_iso(performed_dt)
     created_iso = to_iso(current_time)
-
-    should_decrement_stock = False
-    if req.action_type == "REPLACE":
-        should_decrement_stock = (
-            req.decrement_stock if req.decrement_stock is not None else True
-        )
-    elif req.action_type == "CLEAN" and req.decrement_stock is True:
-        should_decrement_stock = True
-
     stock_decremented = 0
-    if should_decrement_stock and task_row["inventory_id"] is not None:
-        inv_row = conn.execute(
-            "SELECT id, in_stock FROM inventory WHERE id = ?",
-            (task_row["inventory_id"],),
-        ).fetchone()
-        if inv_row and inv_row["in_stock"] > 0:
-            conn.execute(
-                "UPDATE inventory SET in_stock = in_stock - 1, updated_at = ? WHERE id = ?",
-                (created_iso, inv_row["id"]),
-            )
-            stock_decremented = 1
 
     prior_clean_logs = conn.execute(
         "SELECT 1 FROM maintenance_logs WHERE task_id = ? LIMIT 1",
@@ -606,12 +594,6 @@ def undo_log(conn: sqlite3.Connection, log_id: int) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Associated task not found")
 
     conn.execute("DELETE FROM maintenance_logs WHERE id = ?", (log_id,))
-
-    if log_row["stock_decremented"] and task_row["inventory_id"] is not None:
-        conn.execute(
-            "UPDATE inventory SET in_stock = in_stock + 1, updated_at = ? WHERE id = ?",
-            (to_iso(current_time), task_row["inventory_id"]),
-        )
 
     new_last_cleaned, new_last_replaced = _recompute_task_timestamps_from_logs(
         conn, task_row, deleted_log=log_row

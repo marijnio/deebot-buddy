@@ -22,6 +22,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { formatShortDue } from '../utils/date';
+import { formatInStock } from '../utils/stock';
 
 const ICON_MAP = {
   droplets: Droplets,
@@ -148,7 +149,7 @@ export default function TaskCard({
                     {task.inventory.is_low_stock && (
                       <AlertCircle className="h-3 w-3" />
                     )}
-                    {task.inventory.in_stock} {task.inventory.unit_label}
+                    {formatInStock(task.inventory.in_stock, task.inventory.unit_label)}
                   </span>
                 )}
               </div>
@@ -184,10 +185,10 @@ export default function TaskCard({
               type="button"
               disabled={isBusy}
               onClick={() => onQuickComplete(task.id, 'CLEAN')}
-              className="inline-flex items-center gap-1 rounded-xl bg-teal-50 px-2.5 py-1.5 text-xs font-semibold text-teal-700 transition hover:bg-teal-100 disabled:opacity-50 dark:bg-teal-950/60 dark:text-teal-300 dark:hover:bg-teal-900/70"
+              className="inline-flex items-center gap-1 whitespace-nowrap rounded-xl bg-teal-50 px-2.5 py-1.5 text-xs font-semibold text-teal-700 transition hover:bg-teal-100 disabled:opacity-50 dark:bg-teal-950/60 dark:text-teal-300 dark:hover:bg-teal-900/70"
             >
               <Check className="h-3.5 w-3.5" />
-              Cleaned
+              Mark cleaned
             </button>
           )}
           {task.replace_cycle && (
@@ -195,13 +196,10 @@ export default function TaskCard({
               type="button"
               disabled={isBusy}
               onClick={() => onQuickComplete(task.id, 'REPLACE')}
-              className="inline-flex items-center gap-1 rounded-xl bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-50 dark:bg-indigo-950/60 dark:text-indigo-300 dark:hover:bg-indigo-900/70"
+              className="inline-flex items-center gap-1 whitespace-nowrap rounded-xl bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-50 dark:bg-indigo-950/60 dark:text-indigo-300 dark:hover:bg-indigo-900/70"
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              Replaced
-              {task.inventory && (
-                <span className="opacity-70">(-1)</span>
-              )}
+              Mark replaced
             </button>
           )}
         </div>

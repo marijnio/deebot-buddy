@@ -10,7 +10,6 @@ class CompleteTaskRequest(BaseModel):
     action_type: Literal["CLEAN", "REPLACE"]
     performed_at: Optional[str] = None
     notes: str = Field(default="", max_length=1000)
-    decrement_stock: Optional[bool] = None
 
 
 class UpdateTaskRequest(BaseModel):

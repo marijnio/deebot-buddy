@@ -18,6 +18,7 @@ import {
   formatRelativePast,
   toLocalDatetimeInputValue,
 } from '../utils/date';
+import { formatInStock } from '../utils/stock';
 
 function renderFormattedInstructions(text) {
   const parts = text.split(/(\*\*.*?\*\*)/g);
@@ -48,7 +49,6 @@ export default function TaskDetailDrawer({
   // Backdate / log form state
   const [performedAt, setPerformedAt] = useState(toLocalDatetimeInputValue());
   const [notes, setNotes] = useState('');
-  const [deductCleanStock, setDeductCleanStock] = useState(false);
 
   // Schedule editor state
   const [showSchedule, setShowSchedule] = useState(false);
@@ -92,7 +92,6 @@ export default function TaskDetailDrawer({
     if (taskId) {
       setPerformedAt(toLocalDatetimeInputValue());
       setNotes('');
-      setDeductCleanStock(false);
       setShowSchedule(false);
       loadDetail();
     }
@@ -118,8 +117,6 @@ export default function TaskDetailDrawer({
         action_type: actionType,
         performed_at: iso,
         notes,
-        decrement_stock:
-          actionType === 'CLEAN' ? deductCleanStock : undefined,
       });
       setNotes('');
       setPerformedAt(toLocalDatetimeInputValue());
@@ -482,7 +479,7 @@ export default function TaskDetailDrawer({
                     {task.inventory && (
                       <span className="inline-flex items-center gap-1 text-xs font-medium text-stone-500 dark:text-slate-400">
                         <Package className="h-3.5 w-3.5" />
-                        {task.inventory.in_stock} {task.inventory.unit_label} in stock
+                        {formatInStock(task.inventory.in_stock, task.inventory.unit_label)}
                       </span>
                     )}
                   </div>
@@ -524,18 +521,6 @@ export default function TaskDetailDrawer({
                     className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs text-stone-800 placeholder:text-stone-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                   />
 
-                  {task.inventory && !task.replace_cycle && (
-                    <label className="flex items-center gap-2 text-xs text-stone-600 dark:text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={deductCleanStock}
-                        onChange={(e) => setDeductCleanStock(e.target.checked)}
-                        className="rounded border-stone-300 text-teal-600 focus:ring-teal-500"
-                      />
-                      Also deduct 1 {task.inventory.unit_label.replace(/s$/, '')} from stock
-                    </label>
-                  )}
-
                   <div className="flex flex-wrap gap-2 pt-1">
                     {task.clean_cycle && (
                       <button
@@ -545,7 +530,7 @@ export default function TaskDetailDrawer({
                         className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-50"
                       >
                         <Check className="h-4 w-4" />
-                        Log Cleaned
+                        Mark cleaned
                       </button>
                     )}
                     {task.replace_cycle && (
@@ -556,8 +541,7 @@ export default function TaskDetailDrawer({
                         className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
                       >
                         <RefreshCw className="h-4 w-4" />
-                        Log Replaced
-                        {task.inventory ? ' (-1 stock)' : ''}
+                        Mark replaced
                       </button>
                     )}
                   </div>
@@ -602,11 +586,6 @@ export default function TaskDetailDrawer({
                             {log.notes && (
                               <p className="mt-1 text-xs text-stone-600 dark:text-slate-300">
                                 {log.notes}
-                              </p>
-                            )}
-                            {log.stock_decremented === 1 && (
-                              <p className="mt-1 text-[11px] text-stone-400">
-                                Deducted 1 spare from stock
                               </p>
                             )}
                           </div>

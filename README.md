@@ -15,10 +15,10 @@ Modeled directly after the real **ECOVACS DEEBOT T90 PRO OMNI**, the custom SVG 
 
 ## Features
 - **Dynamic Robot Mascot (4 Moods):** Editable standalone SVGs in [`mascots/`](mascots/) with a live **Preview moods** switcher and 1-click **Reload SVG** right in the dashboard.
-- **Dual-Track Maintenance Engine:** Every component tracks **Clean / Check** and **Replace Part** cycles independently. Cleaning resets only the clean timer; replacing resets both timers and decrements your spare parts inventory.
+- **Dual-Track Maintenance Engine:** Every component tracks **Clean / Check** and **Replace Part** cycles independently. Cleaning resets only the clean timer; replacing resets both timers.
 - **14 Pre-Seeded T90 PRO OMNI Components:** Automatically initialized in SQLite (`/app/data/deebot.db`) on first boot with exact T90 PRO OMNI care instructions (including roller mop housing release and 24h filter air-dry reminders).
 - **Full Maintenance Check-Up & Mark Due Now:** Flag all unlogged components or individual items as overdue when onboarding an already-used robot.
-- **Spare Parts Inventory:** Track dust bags, filters, roller mops, main brush, side brushes, and ECOVACS cleaning solution with **"Low Stock — Reorder Buddy Kit"** alerts.
+- **Spare Parts Inventory:** Track dust bags, filters, roller mops, main brush, side brushes, and cleaning solution with **"Low Stock — Reorder Buddy Kit"** alerts.
 - **Backdating, Snooze & Undo:** Log maintenance you did days ago, snooze upcoming tasks, customize intervals, or undo an accidental click.
 - **Dark / Light Mode, Webhooks & JSON Backups:** Built-in theme toggle, webhook test & alert formatting (Discord, Pushover, Gotify, Home Assistant), and 1-click JSON export/import.
 

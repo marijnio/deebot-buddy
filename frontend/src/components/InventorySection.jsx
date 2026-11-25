@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertTriangle, Minus, Package, Plus } from 'lucide-react';
+import { formatUnitLabel } from '../utils/stock';
 
 export default function InventorySection({
   inventory,
@@ -20,7 +21,7 @@ export default function InventorySection({
               Spare Parts Inventory
             </h2>
             <p className="text-xs text-stone-500 dark:text-slate-400">
-              Auto-decrements when you log a part replacement
+              Track spare parts on hand and adjust quantities manually
             </p>
           </div>
         </div>
@@ -86,7 +87,7 @@ export default function InventorySection({
                       {item.in_stock}
                     </span>
                     <span className="ml-1 text-xs text-stone-500 dark:text-slate-400">
-                      {item.unit_label}
+                      {formatUnitLabel(item.in_stock, item.unit_label)}
                     </span>
                   </div>
                   <button

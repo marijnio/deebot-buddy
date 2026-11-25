@@ -107,6 +107,14 @@ export default function App() {
     checkAuthAndLoad();
   }, [checkAuthAndLoad]);
 
+  useEffect(() => {
+    const name = dashboard?.robot_name;
+    document.title =
+      name && name !== 'Deebot T90 PRO OMNI'
+        ? `${name} — Deebot Buddy`
+        : 'Deebot Buddy — T90 PRO OMNI Maintenance Tracker';
+  }, [dashboard?.robot_name]);
+
   const handleLockApp = async () => {
     try {
       await api.logout();
@@ -129,12 +137,25 @@ export default function App() {
       const res = await api.completeTask(taskId, { action_type: actionType });
       setDashboard(res.dashboard);
       const verb = actionType === 'REPLACE' ? 'Replaced' : 'Cleaned';
-      const stockNote = res.stock_decremented ? ' (-1 stock)' : '';
-      showToast(`${verb} ${task?.name || 'component'}${stockNote}`, res.log_id);
+      showToast(`${verb} ${task?.name || 'component'}`, res.log_id);
     } catch (err) {
       showToast(`Error: ${err.message}`);
     } finally {
       setBusyTaskId(null);
+    }
+  };
+
+  const handleRenameRobot = async (newName) => {
+    try {
+      const saved = await api.saveSettings({ robot_name: newName });
+      setAuthStatus((prev) =>
+        prev ? { ...prev, robot_name: saved.robot_name } : prev
+      );
+      await fetchDashboard();
+      showToast(`Renamed robot to "${saved.robot_name}"`);
+    } catch (err) {
+      showToast(`Rename failed: ${err.message}`);
+      throw err;
     }
   };
 
@@ -249,7 +270,10 @@ export default function App() {
                 Deebot Buddy
               </h1>
               <p className="text-[11px] font-medium text-stone-500 dark:text-slate-400">
-                ECOVACS DEEBOT T90 PRO OMNI
+                {dashboard?.robot_name &&
+                dashboard.robot_name !== 'Deebot T90 PRO OMNI'
+                  ? `${dashboard.robot_name} · DEEBOT T90 PRO OMNI`
+                  : 'ECOVACS DEEBOT T90 PRO OMNI'}
               </p>
             </div>
           </div>
@@ -323,6 +347,7 @@ export default function App() {
                 dashboard={dashboard}
                 onQuickComplete={handleQuickComplete}
                 onOpenTask={setSelectedTaskId}
+                onRenameRobot={handleRenameRobot}
                 busyTaskId={busyTaskId}
               />
 

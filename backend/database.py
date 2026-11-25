@@ -87,6 +87,7 @@ def init_db() -> None:
 
         now_iso = datetime.now(timezone.utc).isoformat()
         seed_if_empty(conn, now_iso)
+        migrate_existing_defaults(conn)
         conn.commit()
     finally:
         conn.close()
@@ -159,3 +160,25 @@ def seed_if_empty(conn: sqlite3.Connection, now_iso: str) -> None:
             "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
             (key, value),
         )
+
+
+def migrate_existing_defaults(conn: sqlite3.Connection) -> None:
+    """Idempotently update legacy defaults on existing databases without clobbering user edits."""
+    conn.execute(
+        """
+        UPDATE inventory
+        SET name = 'Cleaning Solution',
+            low_stock_threshold = 0,
+            notes = 'Low-foam floor cleaning solution safe for robot mops'
+        WHERE slug = 'cleaning_solution'
+          AND name = 'Official ECOVACS Cleaning Solution'
+        """
+    )
+    conn.execute(
+        """
+        UPDATE tasks
+        SET instructions = 'Open the station dust collection cover and check the solution tank level; top up with low-foam robot floor cleaning solution.'
+        WHERE slug = 'cleaning_solution_reservoir'
+          AND instructions LIKE '%official ECOVACS%'
+        """
+    )
