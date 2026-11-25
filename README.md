@@ -8,10 +8,6 @@ A lightweight, self-hosted, single-container web app designed for **Synology NAS
 
 Modeled directly after the real **ECOVACS DEEBOT T90 PRO OMNI**, the custom SVG mascot reflects your robot's live maintenance health across 4 moods:
 
-<p align="center">
-  <img src="docs/images/deebot-t90-pro-omni.jpg" alt="ECOVACS DEEBOT T90 PRO OMNI" width="320" />
-</p>
-
 | Sparkling & Happy | Content & Ready | Dusty & Tangled | Needs Rescue! |
 | :---: | :---: | :---: | :---: |
 | <img src="mascots/happy.svg" alt="Happy Mascot" width="140" /> | <img src="mascots/normal.svg" alt="Normal Mascot" width="140" /> | <img src="mascots/dusty.svg" alt="Dusty Mascot" width="140" /> | <img src="mascots/faint.svg" alt="Faint Mascot" width="140" /> |
