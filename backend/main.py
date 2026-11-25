@@ -7,17 +7,19 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend import services
+from backend import auth, services
 from backend.database import get_connection, get_db_path, init_db
 from backend.schemas import (
     BackupPayload,
     BulkFlagTasksRequest,
     CompleteTaskRequest,
+    LoginRequest,
+    PasswordUpdateRequest,
     SettingsUpdateRequest,
     TestWebhookRequest,
     UpdateInventoryRequest,
@@ -51,6 +53,59 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+PUBLIC_API_PATHS = {
+    "/api/health",
+    "/api/auth/status",
+    "/api/auth/login",
+    "/api/auth/logout",
+}
+
+
+def _is_https_request(request: Request) -> bool:
+    return (
+        request.url.scheme == "https"
+        or request.headers.get("x-forwarded-proto", "").lower() == "https"
+    )
+
+
+def _is_request_authenticated(request: Request, conn) -> tuple[bool, dict[str, Any]]:
+    state = auth.get_auth_state(conn)
+    if not state["password_enabled"]:
+        return True, state
+
+    token = request.cookies.get(auth.COOKIE_NAME, "")
+    if auth.verify_session_token(token, state["secret"], state["fingerprint"]):
+        return True, state
+
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        bearer_pw = auth_header[7:].strip()
+        if bearer_pw and auth.verify_credentials(conn, bearer_pw):
+            return True, state
+
+    return False, state
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    path = request.url.path
+    if (
+        request.method != "OPTIONS"
+        and path.startswith("/api/")
+        and path not in PUBLIC_API_PATHS
+    ):
+        conn = get_connection()
+        try:
+            authed, _ = _is_request_authenticated(request, conn)
+        finally:
+            conn.close()
+        if not authed:
+            return JSONResponse(
+                {"detail": "Authentication required"}, status_code=401
+            )
+    return await call_next(request)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -58,6 +113,146 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/api/auth/status")
+def auth_status(request: Request) -> dict[str, Any]:
+    conn = get_connection()
+    try:
+        authed, state = _is_request_authenticated(request, conn)
+        settings = services.get_public_settings_dict(conn)
+        return {
+            "password_enabled": state["password_enabled"],
+            "authenticated": authed,
+            "managed_by_env": state["managed_by_env"],
+            "robot_name": settings.get("robot_name", "Deebot T90 PRO OMNI"),
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/api/auth/login")
+def auth_login(req: LoginRequest, request: Request, response: Response) -> dict[str, Any]:
+    client_ip = request.client.host if request.client else "unknown"
+    retry_after = auth.login_rate_limiter.is_blocked(client_ip)
+    if retry_after > 0:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many failed attempts. Try again in {retry_after}s.",
+        )
+
+    conn = get_connection()
+    try:
+        if not auth.verify_credentials(conn, req.password):
+            auth.login_rate_limiter.record_failure(client_ip)
+            raise HTTPException(status_code=401, detail="Incorrect password")
+
+        auth.login_rate_limiter.reset(client_ip)
+        state = auth.get_auth_state(conn)
+        ttl = (
+            auth.REMEMBER_TTL_SECONDS
+            if req.remember_me
+            else auth.SESSION_TTL_SECONDS
+        )
+        token = auth.create_session_token(
+            state["secret"], state["fingerprint"], ttl
+        )
+        response.set_cookie(
+            key=auth.COOKIE_NAME,
+            value=token,
+            max_age=ttl,
+            httponly=True,
+            samesite="lax",
+            secure=_is_https_request(request),
+            path="/",
+        )
+        return {"authenticated": True}
+    finally:
+        conn.close()
+
+
+@app.post("/api/auth/logout")
+def auth_logout(response: Response) -> dict[str, Any]:
+    response.delete_cookie(key=auth.COOKIE_NAME, path="/")
+    return {"authenticated": False}
+
+
+@app.post("/api/auth/password")
+def update_password(
+    req: PasswordUpdateRequest, request: Request, response: Response
+) -> dict[str, Any]:
+    conn = get_connection()
+    try:
+        state = auth.get_auth_state(conn)
+        if state["managed_by_env"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Password is managed by DEEBOT_PASSWORD environment variable",
+            )
+
+        if state["password_enabled"]:
+            if not req.current_password:
+                raise HTTPException(
+                    status_code=400, detail="Current password is required"
+                )
+            if not auth.verify_password_hash(
+                req.current_password, state["password_hash"]
+            ):
+                raise HTTPException(
+                    status_code=401, detail="Current password is incorrect"
+                )
+
+        new_pw = (req.new_password or "").strip()
+        if not new_pw:
+            conn.execute(
+                "DELETE FROM settings WHERE key = 'auth_password_hash'"
+            )
+            conn.commit()
+            response.delete_cookie(key=auth.COOKIE_NAME, path="/")
+            return {
+                "password_enabled": False,
+                "authenticated": True,
+                "managed_by_env": False,
+            }
+
+        if len(new_pw) < 4:
+            raise HTTPException(
+                status_code=400,
+                detail="New password must be at least 4 characters",
+            )
+
+        pw_hash = auth.hash_password(new_pw)
+        conn.execute(
+            """
+            INSERT INTO settings (key, value) VALUES ('auth_password_hash', ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
+            (pw_hash,),
+        )
+        conn.commit()
+
+        new_state = auth.get_auth_state(conn)
+        token = auth.create_session_token(
+            new_state["secret"],
+            new_state["fingerprint"],
+            auth.REMEMBER_TTL_SECONDS,
+        )
+        response.set_cookie(
+            key=auth.COOKIE_NAME,
+            value=token,
+            max_age=auth.REMEMBER_TTL_SECONDS,
+            httponly=True,
+            samesite="lax",
+            secure=_is_https_request(request),
+            path="/",
+        )
+        return {
+            "password_enabled": True,
+            "authenticated": True,
+            "managed_by_env": False,
+        }
+    finally:
+        conn.close()
 
 
 @app.get("/api/health")
@@ -137,7 +332,7 @@ def update_inventory(inventory_id: int, req: UpdateInventoryRequest) -> dict[str
 def get_settings() -> dict[str, Any]:
     conn = get_connection()
     try:
-        raw = services.get_settings_dict(conn)
+        raw = services.get_public_settings_dict(conn)
         return {
             **raw,
             "notifications_enabled": raw.get("notifications_enabled", "false") == "true",

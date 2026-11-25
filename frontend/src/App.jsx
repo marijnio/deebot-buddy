@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bot,
   ClipboardCheck,
+  Lock,
   Moon,
   RefreshCw,
   Settings,
@@ -16,9 +17,11 @@ import InventorySection from './components/InventorySection';
 import TaskDetailDrawer from './components/TaskDetailDrawer';
 import SettingsModal from './components/SettingsModal';
 import FullCheckModal from './components/FullCheckModal';
+import LoginScreen from './components/LoginScreen';
 import Toast from './components/Toast';
 
 export default function App() {
+  const [authStatus, setAuthStatus] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -44,7 +47,7 @@ export default function App() {
       document.documentElement.classList.toggle('dark', next);
       try {
         localStorage.setItem('deebot-theme', next ? 'dark' : 'light');
-      } catch {}
+      } catch { }
       return next;
     });
   };
@@ -57,21 +60,67 @@ export default function App() {
     }, 6000);
   }, []);
 
-  const fetchDashboard = useCallback(async () => {
-    try {
-      const data = await api.getDashboard();
-      setDashboard(data);
-      setError('');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    const checkAuthAndLoad = useCallback(async () => {
+      try {
+        const status = await api.getAuthStatus();
+        setAuthStatus(status);
+        if (status.password_enabled && !status.authenticated) {
+          setDashboard(null);
+          setLoading(false);
+          return;
+        }
+        const data = await api.getDashboard();
+        setDashboard(data);
+        setError('');
+      } catch (err) {
+        if (err.status === 401) {
+          setAuthStatus((prev) => ({
+            ...(prev || {}),
+            password_enabled: true,
+            authenticated: false,
+          }));
+        } else {
+          setError(err.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }, []);
 
-  useEffect(() => {
-    fetchDashboard();
-  }, [fetchDashboard]);
+    const fetchDashboard = useCallback(async () => {
+      try {
+        const data = await api.getDashboard();
+        setDashboard(data);
+        setError('');
+      } catch (err) {
+        if (err.status === 401) {
+          await checkAuthAndLoad();
+        } else {
+          setError(err.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }, [checkAuthAndLoad]);
+
+    useEffect(() => {
+    checkAuthAndLoad();
+  }, [checkAuthAndLoad]);
+
+  const handleLockApp = async () => {
+    try {
+      await api.logout();
+    } catch { }
+    setSettingsOpen(false);
+    setFullCheckOpen(false);
+    setSelectedTaskId(null);
+    setDashboard(null);
+    setAuthStatus((prev) => ({
+      ...(prev || {}),
+      password_enabled: true,
+      authenticated: false,
+    }));
+  };
 
   const handleQuickComplete = async (taskId, actionType) => {
     setBusyTaskId(taskId);
@@ -172,6 +221,20 @@ export default function App() {
     return filtered;
   }, [dashboard, activeFilter, searchQuery, sortMode]);
 
+  if (authStatus && authStatus.password_enabled && !authStatus.authenticated) {
+    return (
+      <LoginScreen
+        robotName={authStatus.robot_name}
+        darkMode={darkMode}
+        onToggleDarkMode={toggleDarkMode}
+        onUnlocked={() => {
+          setLoading(true);
+          checkAuthAndLoad();
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
       {/* Top Navbar */}
@@ -220,6 +283,17 @@ export default function App() {
               <Settings className="h-4 w-4" />
               <span className="hidden sm:inline">Settings</span>
             </button>
+            {authStatus?.password_enabled && (
+              <button
+                type="button"
+                onClick={handleLockApp}
+                title="Lock Deebot Buddy"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Lock className="h-4 w-4" />
+                <span className="hidden sm:inline">Lock</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -371,6 +445,8 @@ export default function App() {
         onSaved={fetchDashboard}
         onNotify={(msg) => showToast(msg)}
         onOpenFullCheck={() => setFullCheckOpen(true)}
+        authStatus={authStatus}
+        onAuthChanged={checkAuthAndLoad}
       />
 
       <FullCheckModal
@@ -383,8 +459,7 @@ export default function App() {
             setActiveFilter('attention');
           }
           showToast(
-            `Flagged ${flaggedCycles} maintenance cycle${flaggedCycles === 1 ? '' : 's'} as ${
-              urgency === 'overdue' ? 'due now' : 'due soon'
+            `Flagged ${flaggedCycles} maintenance cycle${flaggedCycles === 1 ? '' : 's'} as ${urgency === 'overdue' ? 'due now' : 'due soon'
             }`
           );
         }}

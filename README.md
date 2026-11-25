@@ -85,6 +85,21 @@ Open any of them in Figma, Illustrator, Affinity Designer, or Inkscape, save you
 
 ---
 
+## Password Protection
+
+Protect your Deebot Buddy instance from unauthorized access on your network or reverse proxy in either of two ways:
+
+1. **In the Web UI:** Open **Settings -> Password Protection** to set, update, or remove a password stored hashed (`PBKDF2-SHA256`) in SQLite. Once enabled, a lock screen appears and a **Lock** button is shown in the header.
+2. **Via Docker Environment Variable:** Set `DEEBOT_PASSWORD` in [`docker-compose.yml`](docker-compose.yml) to enforce a password at container startup.
+
+For automated webhook cron checks when password protection is active, pass your password as a Bearer token:
+```bash
+curl -X POST http://localhost:8089/api/notifications/check \
+  -H "Authorization: Bearer YOUR_PASSWORD"
+```
+
+---
+
 ## Webhook Alerts Setup
 In **Settings** (top-right gear icon), paste a webhook URL and click **Test Hook**:
 - **Discord:** `https://discord.com/api/webhooks/...` (auto-detected, sends rich embed)

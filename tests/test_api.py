@@ -325,3 +325,110 @@ def test_bulk_flag_tasks_scopes_and_only_unlogged(client):
     d2 = overdue_payload["dashboard"]
     assert d2["counts"]["overdue"] == 14
     assert d2["mood"] == "faint"
+
+
+def test_password_lifecycle_and_route_protection(client, tmp_path, monkeypatch):
+    # Initially unprotected
+    s0 = client.get("/api/auth/status").json()
+    assert s0["password_enabled"] is False
+    assert s0["authenticated"] is True
+    assert client.get("/api/dashboard").status_code == 200
+
+    # Enable password -> sets signed HttpOnly cookie
+    pw_res = client.post("/api/auth/password", json={"new_password": "my-secret-pass"})
+    assert pw_res.status_code == 200
+    assert pw_res.json()["password_enabled"] is True
+
+    # Authenticated client can still fetch dashboard, but secrets are never leaked
+    assert client.get("/api/dashboard").status_code == 200
+    settings_json = client.get("/api/settings").json()
+    assert "auth_password_hash" not in settings_json
+    assert "auth_secret" not in settings_json
+    export_json = client.get("/api/export").json()
+    assert "auth_password_hash" not in export_json["settings"]
+    assert "auth_secret" not in export_json["settings"]
+
+    # Unauthenticated client is blocked on API endpoints, allowed on health/status/mascots
+    with TestClient(app) as anon:
+        assert anon.get("/api/health").status_code == 200
+        st = anon.get("/api/auth/status").json()
+        assert st["password_enabled"] is True
+        assert st["authenticated"] is False
+        assert anon.get("/mascots/happy.svg").status_code == 200
+
+        assert anon.get("/api/dashboard").status_code == 401
+        assert anon.get("/api/settings").status_code == 401
+        assert anon.get("/api/export").status_code == 401
+        assert anon.post("/api/tasks/bulk-flag", json={}).status_code == 401
+
+        # Bearer token works for automation
+        assert (
+            anon.get(
+                "/api/dashboard",
+                headers={"Authorization": "Bearer my-secret-pass"},
+            ).status_code
+            == 200
+        )
+
+        # Wrong password rejected
+        assert (
+            anon.post("/api/auth/login", json={"password": "wrong"}).status_code == 401
+        )
+
+        # Correct password sets cookie
+        login_res = anon.post(
+            "/api/auth/login", json={"password": "my-secret-pass", "remember_me": True}
+        )
+        assert login_res.status_code == 200
+        assert anon.get("/api/dashboard").status_code == 200
+
+        # Changing password via primary client invalidates anon's old session cookie
+        upd_res = client.post(
+            "/api/auth/password",
+            json={"current_password": "my-secret-pass", "new_password": "new-secret-pass"},
+        )
+        assert upd_res.status_code == 200
+        assert anon.get("/api/dashboard").status_code == 401
+
+    # Importing a backup preserves password protection
+    assert client.post("/api/import", json=export_json).status_code == 200
+    assert client.get("/api/auth/status").json()["password_enabled"] is True
+
+    # Removing password requires current password and unlocks app
+    assert (
+        client.post(
+            "/api/auth/password",
+            json={"current_password": "wrong", "new_password": ""},
+        ).status_code
+        == 401
+    )
+    rm_res = client.post(
+        "/api/auth/password",
+        json={"current_password": "new-secret-pass", "new_password": ""},
+    )
+    assert rm_res.status_code == 200
+    assert rm_res.json()["password_enabled"] is False
+    with TestClient(app) as anon2:
+        assert anon2.get("/api/dashboard").status_code == 200
+
+
+def test_env_password_override(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEEBOT_DB_PATH", str(tmp_path / "env_auth.db"))
+    monkeypatch.setenv("DEEBOT_PASSWORD", "env-super-pass")
+    with TestClient(app) as c:
+        st = c.get("/api/auth/status").json()
+        assert st["password_enabled"] is True
+        assert st["managed_by_env"] is True
+        assert st["authenticated"] is False
+        assert c.get("/api/dashboard").status_code == 401
+
+        assert (
+            c.post("/api/auth/login", json={"password": "env-super-pass"}).status_code
+            == 200
+        )
+        assert c.get("/api/dashboard").status_code == 200
+        # UI password changes blocked when DEEBOT_PASSWORD env var is active
+        assert (
+            c.post("/api/auth/password", json={"new_password": "other"}).status_code
+            == 400
+        )

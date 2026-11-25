@@ -9,6 +9,7 @@ from typing import Any, Optional
 import httpx
 from fastapi import HTTPException
 
+from backend import auth
 from backend.schemas import (
     BackupPayload,
     BulkFlagTasksRequest,
@@ -243,6 +244,11 @@ def _compute_health_score(
 def get_settings_dict(conn: sqlite3.Connection) -> dict[str, str]:
     rows = conn.execute("SELECT key, value FROM settings").fetchall()
     return {row["key"]: row["value"] for row in rows}
+
+
+def get_public_settings_dict(conn: sqlite3.Connection) -> dict[str, str]:
+    raw = get_settings_dict(conn)
+    return {k: v for k, v in raw.items() if k not in auth.INTERNAL_SETTING_KEYS}
 
 
 def build_dashboard(
@@ -873,7 +879,7 @@ def update_settings(
             (key, value),
         )
     conn.commit()
-    return get_settings_dict(conn)
+    return get_public_settings_dict(conn)
 
 
 def _detect_webhook_type(url: str, configured_type: str) -> str:
@@ -1027,7 +1033,7 @@ def export_backup(conn: sqlite3.Connection) -> dict[str, Any]:
         dict(r)
         for r in conn.execute("SELECT * FROM maintenance_logs ORDER BY id ASC").fetchall()
     ]
-    settings = get_settings_dict(conn)
+    settings = get_public_settings_dict(conn)
     return {
         "version": 1,
         "exported_at": to_iso(now_utc()),
@@ -1041,6 +1047,12 @@ def export_backup(conn: sqlite3.Connection) -> dict[str, Any]:
 def import_backup(conn: sqlite3.Connection, payload: BackupPayload) -> dict[str, Any]:
     if not payload.tasks:
         raise HTTPException(status_code=400, detail="Backup payload contains no tasks")
+
+    preserved_internal = {
+        k: v
+        for k, v in get_settings_dict(conn).items()
+        if k in auth.INTERNAL_SETTING_KEYS
+    }
 
     try:
         conn.execute("BEGIN")
@@ -1127,9 +1139,17 @@ def import_backup(conn: sqlite3.Connection, payload: BackupPayload) -> dict[str,
             )
 
         for key, value in payload.settings.items():
+            if str(key) in auth.INTERNAL_SETTING_KEYS:
+                continue
             conn.execute(
                 "INSERT INTO settings (key, value) VALUES (?, ?)",
                 (str(key), str(value)),
+            )
+
+        for key, value in preserved_internal.items():
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?)",
+                (key, value),
             )
 
         conn.commit()

@@ -13,12 +13,31 @@ async function request(url, options = {}) {
     const message =
       (data && typeof data === 'object' && (data.detail || data.message)) ||
       `Request failed (${response.status})`;
-    throw new Error(message);
+    const err = new Error(message);
+    err.status = response.status;
+    throw err;
   }
   return data;
 }
 
 export const api = {
+  getAuthStatus: () => request('/api/auth/status'),
+  login: (payload) =>
+    request('/api/auth/login', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(payload),
+    }),
+  logout: () =>
+    request('/api/auth/logout', {
+      method: 'POST',
+    }),
+  updatePassword: (payload) =>
+    request('/api/auth/password', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(payload),
+    }),
   getDashboard: () => request('/api/dashboard'),
   getTaskDetail: (taskId) => request(`/api/tasks/${taskId}`),
   completeTask: (taskId, payload) =>

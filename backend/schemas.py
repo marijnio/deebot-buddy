@@ -69,3 +69,13 @@ class BackupPayload(BaseModel):
     tasks: list[dict[str, Any]]
     maintenance_logs: list[dict[str, Any]] = Field(default_factory=list)
     settings: dict[str, str] = Field(default_factory=dict)
+
+
+class LoginRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+    remember_me: bool = True
+
+
+class PasswordUpdateRequest(BaseModel):
+    current_password: Optional[str] = Field(default=None, max_length=200)
+    new_password: Optional[str] = Field(default=None, max_length=200)

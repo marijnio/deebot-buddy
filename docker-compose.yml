@@ -12,3 +12,5 @@ services:
     environment:
       - TZ=Europe/Berlin
       - DEEBOT_DB_PATH=/app/data/deebot.db
+      # Optional: lock the web UI with a password (or configure it inside Settings)
+      # - DEEBOT_PASSWORD=change-me
