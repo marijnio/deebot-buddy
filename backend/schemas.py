@@ -22,6 +22,17 @@ class UpdateTaskRequest(BaseModel):
     clear_replace_override: bool = False
     snooze_clean_days: Optional[int] = Field(default=None, ge=1, le=365)
     snooze_replace_days: Optional[int] = Field(default=None, ge=1, le=365)
+    mark_clean_due: bool = False
+    mark_replace_due: bool = False
+
+
+class BulkFlagTasksRequest(BaseModel):
+    scope: Literal["clean_and_bag", "clean_only", "all_cycles", "replace_only"] = (
+        "clean_and_bag"
+    )
+    urgency: Literal["overdue", "due_soon"] = "overdue"
+    only_unlogged: bool = False
+    task_ids: Optional[list[int]] = None
 
 
 class UpdateInventoryRequest(BaseModel):

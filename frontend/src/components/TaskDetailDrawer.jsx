@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  AlertTriangle,
   CalendarClock,
   Check,
   History,
@@ -150,6 +151,28 @@ export default function TaskDetailDrawer({
     }
   };
 
+  const handleMarkDueNow = async (cycleType) => {
+    if (!task) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      const payload =
+        cycleType === 'CLEAN'
+          ? { mark_clean_due: true }
+          : { mark_replace_due: true };
+      const dash = await api.updateTask(task.id, payload);
+      onUpdated(
+        dash,
+        `Marked ${task.name} (${cycleType === 'CLEAN' ? 'clean' : 'replace'}) as due now`
+      );
+      await loadDetail();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSaveSchedule = async (e) => {
     e.preventDefault();
     if (!task) return;
@@ -277,21 +300,37 @@ export default function TaskDetailDrawer({
                         </span>
                       </div>
                       <p className="mt-1 text-[11px] text-stone-500 dark:text-slate-400">
-                        Last cleaned: {formatDateTime(task.clean_cycle.last_at)}
+                        Last cleaned:{' '}
+                        {task.clean_cycle.has_log
+                          ? formatDateTime(task.clean_cycle.last_at)
+                          : 'Not logged yet'}
                       </p>
-                      <div className="mt-2 flex items-center gap-1.5">
-                        <span className="text-[11px] text-stone-400">Snooze:</span>
-                        {[1, 3, 7].map((d) => (
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-stone-400">Snooze:</span>
+                          {[1, 3, 7].map((d) => (
+                            <button
+                              key={d}
+                              type="button"
+                              disabled={submitting}
+                              onClick={() => handleSnooze('CLEAN', d)}
+                              className="rounded-lg border border-stone-200 px-2 py-0.5 text-[11px] font-medium text-stone-600 hover:bg-stone-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                            >
+                              +{d}d
+                            </button>
+                          ))}
+                        </div>
+                        {task.clean_cycle.status !== 'overdue' && (
                           <button
-                            key={d}
                             type="button"
                             disabled={submitting}
-                            onClick={() => handleSnooze('CLEAN', d)}
-                            className="rounded-lg border border-stone-200 px-2 py-0.5 text-[11px] font-medium text-stone-600 hover:bg-stone-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                            onClick={() => handleMarkDueNow('CLEAN')}
+                            className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50 dark:border-rose-900/70 dark:bg-rose-950/60 dark:text-rose-300 dark:hover:bg-rose-900/60"
                           >
-                            +{d}d
+                            <AlertTriangle className="h-3 w-3" />
+                            Mark Due Now
                           </button>
-                        ))}
+                        )}
                       </div>
                     </div>
                   )}
@@ -310,21 +349,37 @@ export default function TaskDetailDrawer({
                         </span>
                       </div>
                       <p className="mt-1 text-[11px] text-stone-500 dark:text-slate-400">
-                        Last replaced: {formatDateTime(task.replace_cycle.last_at)}
+                        Last replaced:{' '}
+                        {task.replace_cycle.has_log
+                          ? formatDateTime(task.replace_cycle.last_at)
+                          : 'Not logged yet'}
                       </p>
-                      <div className="mt-2 flex items-center gap-1.5">
-                        <span className="text-[11px] text-stone-400">Snooze:</span>
-                        {[3, 7, 14].map((d) => (
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-stone-400">Snooze:</span>
+                          {[3, 7, 14].map((d) => (
+                            <button
+                              key={d}
+                              type="button"
+                              disabled={submitting}
+                              onClick={() => handleSnooze('REPLACE', d)}
+                              className="rounded-lg border border-stone-200 px-2 py-0.5 text-[11px] font-medium text-stone-600 hover:bg-stone-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                            >
+                              +{d}d
+                            </button>
+                          ))}
+                        </div>
+                        {task.replace_cycle.status !== 'overdue' && (
                           <button
-                            key={d}
                             type="button"
                             disabled={submitting}
-                            onClick={() => handleSnooze('REPLACE', d)}
-                            className="rounded-lg border border-stone-200 px-2 py-0.5 text-[11px] font-medium text-stone-600 hover:bg-stone-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                            onClick={() => handleMarkDueNow('REPLACE')}
+                            className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50 dark:border-rose-900/70 dark:bg-rose-950/60 dark:text-rose-300 dark:hover:bg-rose-900/60"
                           >
-                            +{d}d
+                            <AlertTriangle className="h-3 w-3" />
+                            Mark Due Now
                           </button>
-                        ))}
+                        )}
                       </div>
                     </div>
                   )}

@@ -1,16 +1,20 @@
-# Stage 1: Build static React + Tailwind frontend
-FROM node:20-alpine AS frontend-builder
+# Stage 1: Build static React + Tailwind frontend natively on the builder arch
+FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend-builder
 WORKDIR /build/frontend
 
-COPY frontend/package.json ./
+COPY frontend/package*.json ./
 RUN npm install --no-audit --no-fund
 
 COPY frontend/ ./
 RUN npm run build
 
-# Stage 2: Lightweight Python FastAPI + SQLite runtime
+# Stage 2: Lightweight Python FastAPI + SQLite runtime (multi-arch: amd64 / arm64)
 FROM python:3.12-slim
 WORKDIR /app
+
+LABEL org.opencontainers.image.source="https://github.com/marijnio/deebot-buddy" \
+    org.opencontainers.image.title="Deebot Buddy" \
+    org.opencontainers.image.description="Self-hosted maintenance tracker for ECOVACS DEEBOT T90 PRO OMNI"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

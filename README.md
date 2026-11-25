@@ -18,20 +18,24 @@ A lightweight, self-hosted, single-container web app designed for **Synology NAS
 
 ## Quick Deploy on Synology NAS (Container Manager)
 
+Uses the **pre-built multi-arch image (`linux/amd64` & `linux/arm64`) hosted on GitHub Container Registry** (`ghcr.io/marijnio/deebot-buddy:latest`) — zero compiling on your NAS!
+
 1. Open **File Station** on your Synology DSM and create the persistent data folder:
    ```
    /volume1/docker/deebot-buddy/data
    ```
-2. Copy this repository onto your NAS (for example `/volume1/docker/deebot-buddy/app`).
-3. Open **Container Manager** -> **Project** -> **Create**:
+2. Open **Container Manager** -> **Project** -> **Create**:
    - **Project name:** `deebot-buddy`
-   - **Path:** `/volume1/docker/deebot-buddy/app`
-   - **Source:** Use existing `docker-compose.yml`
-   - Optionally adjust `TZ` in `docker-compose.yml` to your local timezone (e.g. `America/New_York`, `Europe/London`).
-4. Build and start the project.
-5. Open your browser to `http://<your-synology-ip>:8080`.
+   - **Path:** `/volume1/docker/deebot-buddy` (or wherever you keep your compose projects)
+   - **Source:** **Create docker-compose.yml** and paste the contents of [`docker-compose.yml`](docker-compose.yml) (optionally adjust `TZ` to your local timezone).
+3. Start the project — Container Manager pulls `ghcr.io/marijnio/deebot-buddy:latest` directly.
+4. Open your browser to `http://<your-synology-ip>:8080`.
 
-Your SQLite database is persisted at `/volume1/docker/deebot-buddy/data/deebot.db`, so container updates never lose your maintenance history.
+> **First-time GitHub Package visibility note:** After pushing to `main`, GitHub Actions builds and publishes the image to GHCR. By default, new GHCR packages can inherit private visibility: on GitHub go to your profile **Packages -> deebot-buddy -> Package settings -> Change visibility -> Public** so your Synology NAS can pull without credentials (or log in on Synology Container Manager -> Registry using a GitHub Personal Access Token with `read:packages`).
+
+> **Updating later:** In Synology Container Manager -> **Project** -> `deebot-buddy`, click **Action -> Clean / Build** (or pull the latest `ghcr.io/marijnio/deebot-buddy:latest` image). Your SQLite database stays safe in `/volume1/docker/deebot-buddy/data/deebot.db`.
+
+*(Want to build locally instead? Replace `image: ghcr.io/...` with `build: .` in `docker-compose.yml`.)*
 
 ---
 

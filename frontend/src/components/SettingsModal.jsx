@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Bell,
+  ClipboardCheck,
   Download,
   Save,
   Send,
@@ -10,7 +11,13 @@ import {
 } from 'lucide-react';
 import { api } from '../api';
 
-export default function SettingsModal({ isOpen, onClose, onSaved, onNotify }) {
+export default function SettingsModal({
+  isOpen,
+  onClose,
+  onSaved,
+  onNotify,
+  onOpenFullCheck,
+}) {
   const [form, setForm] = useState({
     robot_name: 'Deebot T90 PRO OMNI',
     webhook_url: '',
@@ -268,6 +275,31 @@ export default function SettingsModal({ isOpen, onClose, onSaved, onNotify }) {
                   </button>
                 </div>
               </div>
+
+              {/* Full Maintenance Check-Up */}
+              {onOpenFullCheck && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-rose-200/80 bg-rose-50/50 p-4 dark:border-rose-900/50 dark:bg-rose-950/20">
+                  <div>
+                    <p className="text-xs font-bold text-stone-800 dark:text-slate-100">
+                      Full Maintenance Check-Up
+                    </p>
+                    <p className="text-[11px] text-stone-500 dark:text-slate-400">
+                      Mark unlogged or overdue components as due now
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenFullCheck();
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-800/70 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-950/50"
+                  >
+                    <ClipboardCheck className="h-3.5 w-3.5" />
+                    Flag Tasks as Due...
+                  </button>
+                </div>
+              )}
 
               {/* JSON Backup Export / Import */}
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-stone-200 p-4 dark:border-slate-800">

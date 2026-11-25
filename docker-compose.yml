@@ -1,6 +1,6 @@
 services:
   deebot-buddy:
-    build: .
+    image: ghcr.io/marijnio/deebot-buddy:latest
     container_name: deebot-buddy
     restart: unless-stopped
     ports:
@@ -8,6 +8,7 @@ services:
     volumes:
       # Synology NAS persistent SQLite data folder (create /volume1/docker/deebot-buddy/data first)
       - /volume1/docker/deebot-buddy/data:/app/data
+      # Optional: drop custom mascot SVGs into /volume1/docker/deebot-buddy/data/mascots/
     environment:
       - TZ=Europe/Berlin
       - DEEBOT_DB_PATH=/app/data/deebot.db

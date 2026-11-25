@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from backend.schemas import (
     BackupPayload,
+    BulkFlagTasksRequest,
     CompleteTaskRequest,
     SettingsUpdateRequest,
     TestWebhookRequest,
@@ -116,6 +117,8 @@ def _serialize_task(
     inv_map: dict[int, dict[str, Any]],
     log_counts: dict[int, int],
     now: datetime,
+    clean_logged_ids: Optional[set[int]] = None,
+    replace_logged_ids: Optional[set[int]] = None,
 ) -> dict[str, Any]:
     clean_cycle = compute_cycle(
         row["clean_interval_days"],
@@ -123,12 +126,22 @@ def _serialize_task(
         row["clean_due_override"],
         now,
     )
+    if clean_cycle is not None:
+        clean_cycle["has_log"] = (
+            row["id"] in clean_logged_ids if clean_logged_ids is not None else False
+        )
+
     replace_cycle = compute_cycle(
         row["replace_interval_days"],
         row["last_replaced_at"],
         row["replace_due_override"],
         now,
     )
+    if replace_cycle is not None:
+        replace_cycle["has_log"] = (
+            row["id"] in replace_logged_ids if replace_logged_ids is not None else False
+        )
+
     overall_status, max_pct = _task_status_from_cycles(clean_cycle, replace_cycle)
 
     cycles_with_type: list[tuple[str, dict[str, Any]]] = []
@@ -245,11 +258,30 @@ def build_dashboard(
         "SELECT task_id, COUNT(*) AS cnt FROM maintenance_logs GROUP BY task_id"
     ).fetchall()
     log_counts = {row["task_id"]: row["cnt"] for row in count_rows}
+    total_logs = sum(log_counts.values())
+
+    clean_logged_ids = {
+        row["task_id"]
+        for row in conn.execute(
+            "SELECT DISTINCT task_id FROM maintenance_logs WHERE action_type IN ('CLEAN', 'REPLACE')"
+        ).fetchall()
+    }
+    replace_logged_ids = {
+        row["task_id"]
+        for row in conn.execute(
+            "SELECT DISTINCT task_id FROM maintenance_logs WHERE action_type = 'REPLACE'"
+        ).fetchall()
+    }
 
     task_rows = conn.execute(
         "SELECT * FROM tasks ORDER BY sort_order ASC, id ASC"
     ).fetchall()
-    tasks = [_serialize_task(r, inv_map, log_counts, current_time) for r in task_rows]
+    tasks = [
+        _serialize_task(
+            r, inv_map, log_counts, current_time, clean_logged_ids, replace_logged_ids
+        )
+        for r in task_rows
+    ]
 
     overdue_count = sum(1 for t in tasks if t["overall_status"] == "overdue")
     due_soon_count = sum(1 for t in tasks if t["overall_status"] == "due_soon")
@@ -318,6 +350,7 @@ def build_dashboard(
             "due_soon": due_soon_count,
             "ok": ok_count,
             "low_stock": low_stock_count,
+            "total_logs": total_logs,
         },
         "dirty_water_overdue": dirty_water_overdue,
         "next_upcoming": next_upcoming,
@@ -355,7 +388,22 @@ def get_task_detail(
             (task_id,),
         ).fetchall()
     ]
-    task_dict = _serialize_task(row, inv_map, {task_id: len(logs)}, current_time)
+    clean_logged_ids = (
+        {task_id}
+        if any(l["action_type"] in ("CLEAN", "REPLACE") for l in logs)
+        else set()
+    )
+    replace_logged_ids = (
+        {task_id} if any(l["action_type"] == "REPLACE" for l in logs) else set()
+    )
+    task_dict = _serialize_task(
+        row,
+        inv_map,
+        {task_id: len(logs)},
+        current_time,
+        clean_logged_ids,
+        replace_logged_ids,
+    )
     return {"task": task_dict, "logs": logs}
 
 
@@ -635,7 +683,9 @@ def update_task(
     clean_override = row["clean_due_override"]
     replace_override = row["replace_due_override"]
 
-    if req.clear_clean_override:
+    if req.mark_clean_due and clean_interval is not None:
+        clean_override = to_iso(current_time - timedelta(minutes=1))
+    elif req.clear_clean_override:
         clean_override = None
     elif req.clean_due_override is not None:
         try:
@@ -649,7 +699,9 @@ def update_task(
         base_dt = max(current_time, parse_iso(current_cycle["due_at"])) if current_cycle else current_time
         clean_override = to_iso(base_dt + timedelta(days=req.snooze_clean_days))
 
-    if req.clear_replace_override:
+    if req.mark_replace_due and replace_interval is not None:
+        replace_override = to_iso(current_time - timedelta(minutes=1))
+    elif req.clear_replace_override:
         replace_override = None
     elif req.replace_due_override is not None:
         try:
@@ -676,6 +728,88 @@ def update_task(
     )
     conn.commit()
     return build_dashboard(conn, current_time)
+
+
+def bulk_flag_tasks(
+    conn: sqlite3.Connection, req: BulkFlagTasksRequest
+) -> dict[str, Any]:
+    """Flag matching component cycles as overdue (Due Now) or due_soon without fake logs."""
+    current_time = now_utc()
+    if req.task_ids:
+        placeholders = ",".join("?" for _ in req.task_ids)
+        task_rows = conn.execute(
+            f"SELECT * FROM tasks WHERE id IN ({placeholders}) ORDER BY sort_order ASC, id ASC",
+            tuple(req.task_ids),
+        ).fetchall()
+    else:
+        task_rows = conn.execute(
+            "SELECT * FROM tasks ORDER BY sort_order ASC, id ASC"
+        ).fetchall()
+
+    clean_logged_ids = {
+        row["task_id"]
+        for row in conn.execute(
+            "SELECT DISTINCT task_id FROM maintenance_logs WHERE action_type IN ('CLEAN', 'REPLACE')"
+        ).fetchall()
+    }
+    replace_logged_ids = {
+        row["task_id"]
+        for row in conn.execute(
+            "SELECT DISTINCT task_id FROM maintenance_logs WHERE action_type = 'REPLACE'"
+        ).fetchall()
+    }
+
+    def target_due_iso(interval_days: int) -> str:
+        if req.urgency == "overdue":
+            return to_iso(current_time - timedelta(minutes=1))
+        lead = max(timedelta(hours=1), timedelta(days=interval_days * 0.2))
+        return to_iso(current_time + lead)
+
+    flagged_cycles = 0
+    for row in task_rows:
+        task_id = row["id"]
+        new_clean_override = row["clean_due_override"]
+        new_replace_override = row["replace_due_override"]
+        changed = False
+
+        should_flag_clean = (
+            row["clean_interval_days"] is not None
+            and req.scope in ("clean_and_bag", "clean_only", "all_cycles")
+            and (not req.only_unlogged or task_id not in clean_logged_ids)
+        )
+        if should_flag_clean:
+            new_clean_override = target_due_iso(row["clean_interval_days"])
+            flagged_cycles += 1
+            changed = True
+
+        should_flag_replace = (
+            row["replace_interval_days"] is not None
+            and (
+                req.scope in ("all_cycles", "replace_only")
+                or (req.scope == "clean_and_bag" and row["slug"] == "antibacterial_dust_bag")
+            )
+            and (not req.only_unlogged or task_id not in replace_logged_ids)
+        )
+        if should_flag_replace:
+            new_replace_override = target_due_iso(row["replace_interval_days"])
+            flagged_cycles += 1
+            changed = True
+
+        if changed:
+            conn.execute(
+                """
+                UPDATE tasks
+                SET clean_due_override = ?, replace_due_override = ?
+                WHERE id = ?
+                """,
+                (new_clean_override, new_replace_override, task_id),
+            )
+
+    conn.commit()
+    return {
+        "flagged_cycles": flagged_cycles,
+        "dashboard": build_dashboard(conn, current_time),
+    }
 
 
 def update_inventory(

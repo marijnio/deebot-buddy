@@ -33,6 +33,12 @@ export const api = {
       headers: JSON_HEADERS,
       body: JSON.stringify(payload),
     }),
+  bulkFlagTasks: (payload) =>
+    request('/api/tasks/bulk-flag', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(payload),
+    }),
   undoLog: (logId) =>
     request(`/api/logs/${logId}`, {
       method: 'DELETE',

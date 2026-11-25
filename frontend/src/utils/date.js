@@ -23,6 +23,9 @@ export function formatShortDue(daysRemaining) {
   if (daysRemaining === null || daysRemaining === undefined) return '';
   if (daysRemaining <= 0) {
     const overdueDays = Math.abs(daysRemaining);
+    if (overdueDays * 24 < 1) {
+      return 'Due now';
+    }
     if (overdueDays < 1) {
       const hrs = Math.max(1, Math.round(overdueDays * 24));
       return `${hrs}h overdue`;

@@ -244,3 +244,84 @@ def test_mascots_endpoint_and_override(client, tmp_path):
     override_res = client.get("/mascots/happy.svg")
     assert override_res.status_code == 200
     assert "custom-override" in override_res.text
+
+
+def test_mark_single_task_due_now(client):
+    dash = client.get("/api/dashboard").json()
+    assert dash["counts"]["total_logs"] == 0
+
+    clean_tank = next(t for t in dash["tasks"] if t["slug"] == "clean_water_tank")
+    assert clean_tank["clean_cycle"]["has_log"] is False
+
+    # Flag single task as due now without creating any log entry
+    flag_res = client.patch(
+        f"/api/tasks/{clean_tank['id']}",
+        json={"mark_clean_due": True},
+    )
+    assert flag_res.status_code == 200
+    flagged_dash = flag_res.json()
+    assert flagged_dash["counts"]["total_logs"] == 0
+    flagged_task = next(
+        t for t in flagged_dash["tasks"] if t["id"] == clean_tank["id"]
+    )
+    assert flagged_task["overall_status"] == "overdue"
+    assert flagged_task["clean_cycle"]["is_override"] is True
+    assert flagged_task["clean_cycle"]["has_log"] is False
+
+    # Completing CLEAN clears the override and marks has_log=True
+    done_res = client.post(
+        f"/api/tasks/{clean_tank['id']}/complete",
+        json={"action_type": "CLEAN", "notes": "Rinsed tank"},
+    )
+    assert done_res.status_code == 200
+    done_dash = done_res.json()["dashboard"]
+    assert done_dash["counts"]["total_logs"] == 1
+    done_task = next(
+        t for t in done_dash["tasks"] if t["id"] == clean_tank["id"]
+    )
+    assert done_task["overall_status"] == "ok"
+    assert done_task["clean_cycle"]["is_override"] is False
+    assert done_task["clean_cycle"]["has_log"] is True
+
+
+def test_bulk_flag_tasks_scopes_and_only_unlogged(client):
+    # Log one task first so we can verify only_unlogged later
+    dash = client.get("/api/dashboard").json()
+    drip_tray = next(t for t in dash["tasks"] if t["slug"] == "drip_tray")
+    client.post(
+        f"/api/tasks/{drip_tray['id']}/complete",
+        json={"action_type": "CLEAN"},
+    )
+
+    # 1. Flag all unlogged clean_and_bag cycles as due_soon -> should skip drip_tray
+    due_soon_res = client.post(
+        "/api/tasks/bulk-flag",
+        json={
+            "scope": "clean_and_bag",
+            "urgency": "due_soon",
+            "only_unlogged": True,
+        },
+    )
+    assert due_soon_res.status_code == 200
+    due_soon_payload = due_soon_res.json()
+    assert due_soon_payload["flagged_cycles"] == 13
+    d1 = due_soon_payload["dashboard"]
+    assert d1["mood"] == "normal"
+    drip_after = next(t for t in d1["tasks"] if t["id"] == drip_tray["id"])
+    assert drip_after["overall_status"] == "ok"
+
+    # 2. Flag all clean_and_bag cycles (including logged) as overdue -> all 14 tasks overdue -> faint
+    overdue_res = client.post(
+        "/api/tasks/bulk-flag",
+        json={
+            "scope": "clean_and_bag",
+            "urgency": "overdue",
+            "only_unlogged": False,
+        },
+    )
+    assert overdue_res.status_code == 200
+    overdue_payload = overdue_res.json()
+    assert overdue_payload["flagged_cycles"] == 14
+    d2 = overdue_payload["dashboard"]
+    assert d2["counts"]["overdue"] == 14
+    assert d2["mood"] == "faint"

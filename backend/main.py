@@ -16,6 +16,7 @@ from backend import services
 from backend.database import get_connection, get_db_path, init_db
 from backend.schemas import (
     BackupPayload,
+    BulkFlagTasksRequest,
     CompleteTaskRequest,
     SettingsUpdateRequest,
     TestWebhookRequest,
@@ -92,6 +93,15 @@ def complete_task(task_id: int, req: CompleteTaskRequest) -> dict[str, Any]:
     conn = get_connection()
     try:
         return services.complete_task(conn, task_id, req)
+    finally:
+        conn.close()
+
+
+@app.post("/api/tasks/bulk-flag")
+def bulk_flag_tasks(req: BulkFlagTasksRequest) -> dict[str, Any]:
+    conn = get_connection()
+    try:
+        return services.bulk_flag_tasks(conn, req)
     finally:
         conn.close()
 

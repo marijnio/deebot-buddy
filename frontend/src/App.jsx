@@ -1,5 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Moon, RefreshCw, Settings, Sun } from 'lucide-react';
+import {
+  Bot,
+  ClipboardCheck,
+  Moon,
+  RefreshCw,
+  Settings,
+  Sun,
+  X,
+} from 'lucide-react';
 import { api } from './api';
 import HeroSection from './components/HeroSection';
 import FilterBar from './components/FilterBar';
@@ -7,6 +15,7 @@ import TaskCard from './components/TaskCard';
 import InventorySection from './components/InventorySection';
 import TaskDetailDrawer from './components/TaskDetailDrawer';
 import SettingsModal from './components/SettingsModal';
+import FullCheckModal from './components/FullCheckModal';
 import Toast from './components/Toast';
 
 export default function App() {
@@ -18,6 +27,8 @@ export default function App() {
   const [sortMode, setSortMode] = useState('urgency');
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [fullCheckOpen, setFullCheckOpen] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
   const [busyTaskId, setBusyTaskId] = useState(null);
   const [busyInventoryId, setBusyInventoryId] = useState(null);
   const [toast, setToast] = useState(null);
@@ -241,9 +252,47 @@ export default function App() {
                 busyTaskId={busyTaskId}
               />
 
+              {/* First-run / unlogged full check-up prompt */}
+              {dashboard.counts.total_logs === 0 &&
+                dashboard.counts.overdue === 0 &&
+                !bannerDismissed && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200/90 bg-amber-50/80 px-4 py-3 dark:border-amber-900/60 dark:bg-amber-950/30">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300">
+                        <ClipboardCheck className="h-4.5 w-4.5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-stone-900 sm:text-sm dark:text-white">
+                          Long time since last maintenance?
+                        </p>
+                        <p className="text-xs text-stone-600 dark:text-slate-300">
+                          No maintenance logs recorded yet. Flag components as due now to start a full check-up.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFullCheckOpen(true)}
+                        className="rounded-xl bg-stone-900 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-stone-800 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
+                      >
+                        Start Full Check-Up
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBannerDismissed(true)}
+                        aria-label="Dismiss check-up prompt"
+                        className="rounded-xl p-1.5 text-stone-400 hover:bg-amber-100 hover:text-stone-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
               {/* Maintenance Components */}
               <section className="space-y-4">
-                <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div className="flex flex-wrap items-end justify-between gap-3">
                   <div>
                     <h2 className="text-lg font-bold text-stone-900 dark:text-white">
                       Maintenance Schedule
@@ -252,6 +301,14 @@ export default function App() {
                       Click any component card for T90 PRO OMNI care instructions, backdating, and history
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setFullCheckOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 transition hover:bg-stone-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    <ClipboardCheck className="h-3.5 w-3.5 text-rose-500" />
+                    Full Check-Up
+                  </button>
                 </div>
 
                 <FilterBar
@@ -313,6 +370,24 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         onSaved={fetchDashboard}
         onNotify={(msg) => showToast(msg)}
+        onOpenFullCheck={() => setFullCheckOpen(true)}
+      />
+
+      <FullCheckModal
+        isOpen={fullCheckOpen}
+        onClose={() => setFullCheckOpen(false)}
+        totalLogs={dashboard?.counts?.total_logs || 0}
+        onSuccess={(newDash, flaggedCycles, urgency) => {
+          setDashboard(newDash);
+          if (urgency === 'overdue') {
+            setActiveFilter('attention');
+          }
+          showToast(
+            `Flagged ${flaggedCycles} maintenance cycle${flaggedCycles === 1 ? '' : 's'} as ${
+              urgency === 'overdue' ? 'due now' : 'due soon'
+            }`
+          );
+        }}
       />
 
       <Toast
