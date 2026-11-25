@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 220" width="240" height="220" role="img" aria-label="Deebot Buddy mascot looking happy">
+  <style>
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-6px); }
+    }
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.35; transform: scale(0.85) rotate(0deg); }
+      50% { opacity: 1; transform: scale(1.15) rotate(12deg); }
+    }
+    .anim-float { animation: float 3.6s ease-in-out infinite; }
+    .anim-twinkle { animation: twinkle 2.4s ease-in-out infinite; }
+    .anim-twinkle-delay { animation: twinkle 2.4s ease-in-out 0.9s infinite; }
+  </style>
+
+  <defs>
+    <radialGradient id="auraHappy" cx="50%" cy="52%" r="50%">
+      <stop offset="0%" stop-color="#a7f3d0" stop-opacity="0.65" />
+      <stop offset="100%" stop-color="#a7f3d0" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="matteLidGrad" cx="42%" cy="38%" r="65%">
+      <stop offset="0%" stop-color="#2c3036" />
+      <stop offset="65%" stop-color="#1b1e23" />
+      <stop offset="100%" stop-color="#111317" />
+    </radialGradient>
+    <linearGradient id="rearGlossGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2b3038" />
+      <stop offset="50%" stop-color="#13161b" />
+      <stop offset="100%" stop-color="#090b0e" />
+    </linearGradient>
+    <linearGradient id="bumperRimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#262a30" />
+      <stop offset="100%" stop-color="#0b0d10" />
+    </linearGradient>
+    <linearGradient id="frontSkirtGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0b0d10" />
+      <stop offset="25%" stop-color="#1b1f25" />
+      <stop offset="50%" stop-color="#262b33" />
+      <stop offset="75%" stop-color="#171a20" />
+      <stop offset="100%" stop-color="#090b0e" />
+    </linearGradient>
+    <linearGradient id="visorGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#050608" />
+      <stop offset="100%" stop-color="#12161f" />
+    </linearGradient>
+    <linearGradient id="silverYGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc" />
+      <stop offset="45%" stop-color="#cbd5e1" />
+      <stop offset="100%" stop-color="#7c8798" />
+    </linearGradient>
+    <linearGradient id="blueBrushGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+    <clipPath id="topDiscClip">
+      <ellipse cx="120" cy="100" rx="71" ry="44" />
+    </clipPath>
+  </defs>
+
+  <g id="aura">
+    <circle cx="120" cy="116" r="96" fill="url(#auraHappy)" />
+  </g>
+
+  <g id="shadow">
+    <ellipse cx="120" cy="182" rx="74" ry="13" fill="#090b0e" opacity="0.22" />
+  </g>
+
+  <g id="mood-backdrop">
+    <g transform="translate(36, 52)">
+      <path class="anim-twinkle" d="M0,-11 L2.8,-2.8 L11,0 L2.8,2.8 L0,11 L-2.8,2.8 L-11,0 L-2.8,-2.8 Z" fill="#10b981" />
+    </g>
+    <g transform="translate(198, 56)">
+      <path class="anim-twinkle-delay" d="M0,-9 L2.2,-2.2 L9,0 L2.2,2.2 L0,9 L-2.2,2.2 L-9,0 L-2.2,-2.2 Z" fill="#fbbf24" />
+    </g>
+    <g transform="translate(190, 146)">
+      <path class="anim-twinkle" d="M0,-7 L1.8,-1.8 L7,0 L1.8,1.8 L0,7 L-1.8,1.8 L-7,0 L-1.8,-1.8 Z" fill="#34d399" />
+    </g>
+    <circle cx="48" cy="140" r="3.5" fill="#6ee7b7" opacity="0.85" />
+  </g>
+
+  <g id="robot-body" class="anim-float">
+    <g id="side-brush" transform="translate(46, 146)">
+      <g stroke="#1e293b" stroke-width="1.6" stroke-linecap="round">
+        <line x1="-2" y1="8" x2="-22" y2="11" />
+        <line x1="-2" y1="10" x2="-23" y2="15" />
+        <line x1="-2" y1="12" x2="-20" y2="19" />
+      </g>
+      <g stroke="#1e293b" stroke-width="1.6" stroke-linecap="round">
+        <line x1="6" y1="14" x2="-6" y2="29" />
+        <line x1="8" y1="15" x2="-1" y2="31" />
+        <line x1="10" y1="15" x2="4" y2="31" />
+      </g>
+      <path d="M12,4 L-4,9 M12,4 L7,18 M12,4 L22,12" stroke="url(#blueBrushGrad)" stroke-width="4.2" stroke-linecap="round" />
+      <circle cx="12" cy="5" r="4.5" fill="#0284c7" stroke="#38bdf8" stroke-width="1" />
+    </g>
+
+    <g id="front-bumper">
+      <path d="M42,102 L42,134 C42,163 77,184 120,184 C163,184 198,163 198,134 L198,102 Z" fill="url(#frontSkirtGrad)" />
+      <path d="M44,132 C44,159 78,179 120,179 C162,179 196,159 196,132" fill="none" stroke="#050608" stroke-width="1.6" />
+      <ellipse cx="120" cy="102" rx="78" ry="49" fill="url(#bumperRimGrad)" stroke="#2f353f" stroke-width="1.2" />
+      <ellipse cx="120" cy="100" rx="72.5" ry="45" fill="#07080a" />
+    </g>
+
+    <g id="sensor-visor">
+      <path d="M66,127 C84,139 156,139 174,127 L172,158 C152,170 88,170 68,158 Z" fill="url(#visorGrad)" stroke="#2d333d" stroke-width="1.5" stroke-linejoin="round" />
+      <path d="M72,131 C90,141 150,141 168,131" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-linecap="round" opacity="0.16" />
+    </g>
+
+    <g id="top-lid" clip-path="url(#topDiscClip)">
+      <ellipse cx="120" cy="100" rx="71" ry="44" fill="url(#matteLidGrad)" />
+      <g id="rear-gloss-panel">
+        <path d="M45,52 L195,52 L195,78 Q120,66 45,78 Z" fill="url(#rearGlossGrad)" />
+        <path d="M45,78 Q120,66 195,78" fill="none" stroke="#060709" stroke-width="1.8" />
+        <path d="M45,79.2 Q120,67.2 195,79.2" fill="none" stroke="#3a404a" stroke-width="0.8" opacity="0.65" />
+      </g>
+      <path d="M66,96 C88,78 134,76 164,86" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" opacity="0.06" />
+    </g>
+
+    <ellipse id="mood-ring" cx="120" cy="100" rx="71" ry="44" fill="none" stroke="#34d399" stroke-width="1.8" opacity="0.72" />
+
+    <g id="ecovacs-logo" transform="translate(120, 63)" fill="none" stroke="#e2e8f0" stroke-width="1.4" stroke-linecap="round" opacity="0.88">
+      <path d="M-3,-2.5 A4,2.8 0 1,1 3,-2.5" />
+      <path d="M-5.5,0.5 Q0,4.2 5.5,0.5" />
+      <line x1="-1.5" y1="-0.5" x2="1.5" y2="-0.5" />
+    </g>
+
+    <g id="silver-y-emblem" transform="translate(120, 111)">
+      <g stroke="#050608" stroke-width="6.2" stroke-linecap="round" opacity="0.85">
+        <line x1="0" y1="0.8" x2="0" y2="-11.5" />
+        <line x1="0" y1="0.8" x2="-11.5" y2="8.8" />
+        <line x1="0" y1="0.8" x2="11.5" y2="8.8" />
+      </g>
+      <g stroke="url(#silverYGrad)" stroke-width="4.4" stroke-linecap="round">
+        <line x1="0" y1="0" x2="0" y2="-12" />
+        <line x1="0" y1="0" x2="-11.5" y2="8" />
+        <line x1="0" y1="0" x2="11.5" y2="8" />
+      </g>
+      <g stroke="#ffffff" stroke-width="1.1" stroke-linecap="round" opacity="0.65">
+        <line x1="-0.5" y1="-2" x2="-0.5" y2="-11" />
+        <line x1="-2" y1="0.5" x2="-10.5" y2="6.8" />
+        <line x1="2" y1="0.5" x2="10.5" y2="6.8" />
+      </g>
+    </g>
+
+    <g id="face-expression">
+      <path d="M91,150 Q98,140 105,150" fill="none" stroke="#34d399" stroke-width="4" stroke-linecap="round" />
+      <path d="M135,150 Q142,140 149,150" fill="none" stroke="#34d399" stroke-width="4" stroke-linecap="round" />
+      <ellipse cx="86" cy="155" rx="5" ry="2.6" fill="#fb7185" opacity="0.8" />
+      <ellipse cx="154" cy="155" rx="5" ry="2.6" fill="#fb7185" opacity="0.8" />
+      <path d="M112,153 Q120,161 128,153" fill="none" stroke="#6ee7b7" stroke-width="3" stroke-linecap="round" />
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,246 @@
+"""Comprehensive API and domain tests for Deebot Buddy."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from fastapi.testclient import TestClient
+
+from backend import services
+from backend.database import get_connection, init_db
+from backend.main import app
+
+
+@pytest.fixture()
+def client(tmp_path, monkeypatch):
+    db_file = tmp_path / "test_deebot.db"
+    monkeypatch.setenv("DEEBOT_DB_PATH", str(db_file))
+    with TestClient(app) as c:
+        yield c
+
+
+def test_auto_seed_and_idempotency(client):
+    res = client.get("/api/dashboard")
+    assert res.status_code == 200
+    data = res.json()
+
+    assert len(data["tasks"]) == 14
+    assert len(data["inventory"]) == 6
+    assert data["mood"] == "happy"
+    assert data["health_score"] >= 90
+
+    slugs = {t["slug"] for t in data["tasks"]}
+    assert "dirty_water_tank" in slugs
+    assert "washable_roller_mop" in slugs
+    assert "antibacterial_dust_bag" in slugs
+
+    # Main brush starts at 1 in stock with threshold 1 -> low stock badge active
+    main_brush_inv = next(
+        i for i in data["inventory"] if i["slug"] == "main_brush"
+    )
+    assert main_brush_inv["in_stock"] == 1
+    assert main_brush_inv["is_low_stock"] is True
+
+    # Calling init_db again should not duplicate rows
+    init_db()
+    res2 = client.get("/api/dashboard")
+    assert len(res2.json()["tasks"]) == 14
+    assert len(res2.json()["inventory"]) == 6
+
+
+def test_dual_track_clean_vs_replace_and_undo(client):
+    dash = client.get("/api/dashboard").json()
+    roller_task = next(
+        t for t in dash["tasks"] if t["slug"] == "washable_roller_mop"
+    )
+    task_id = roller_task["id"]
+    initial_stock = roller_task["inventory"]["in_stock"]
+    initial_replace_last = roller_task["replace_cycle"]["last_at"]
+
+    # Backdate a CLEAN action 5 days ago -> clean updates, replace & stock stay untouched
+    five_days_ago = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+    clean_res = client.post(
+        f"/api/tasks/{task_id}/complete",
+        json={
+            "action_type": "CLEAN",
+            "performed_at": five_days_ago,
+            "notes": "Deep cleaned housing",
+        },
+    )
+    assert clean_res.status_code == 200
+    clean_payload = clean_res.json()
+    assert clean_payload["stock_decremented"] is False
+
+    updated_roller = next(
+        t
+        for t in clean_payload["dashboard"]["tasks"]
+        if t["id"] == task_id
+    )
+    assert updated_roller["inventory"]["in_stock"] == initial_stock
+    assert updated_roller["replace_cycle"]["last_at"] == initial_replace_last
+    assert updated_roller["clean_cycle"]["percent_elapsed"] > 30.0
+
+    # Now log REPLACE -> updates BOTH clean and replace timers, decrements stock by 1
+    replace_res = client.post(
+        f"/api/tasks/{task_id}/complete",
+        json={"action_type": "REPLACE", "notes": "Installed fresh roller"},
+    )
+    assert replace_res.status_code == 200
+    replace_payload = replace_res.json()
+    assert replace_payload["stock_decremented"] is True
+    replace_log_id = replace_payload["log_id"]
+
+    after_replace = next(
+        t
+        for t in replace_payload["dashboard"]["tasks"]
+        if t["id"] == task_id
+    )
+    assert after_replace["inventory"]["in_stock"] == initial_stock - 1
+    assert after_replace["clean_cycle"]["percent_elapsed"] < 5.0
+    assert after_replace["replace_cycle"]["percent_elapsed"] < 5.0
+
+    # Undo the REPLACE log -> restores stock (+1) and prior clean/replace timestamps
+    undo_res = client.delete(f"/api/logs/{replace_log_id}")
+    assert undo_res.status_code == 200
+    after_undo = next(
+        t for t in undo_res.json()["dashboard"]["tasks"] if t["id"] == task_id
+    )
+    assert after_undo["inventory"]["in_stock"] == initial_stock
+    assert after_undo["replace_cycle"]["last_at"] == initial_replace_last
+    assert after_undo["clean_cycle"]["percent_elapsed"] > 30.0
+
+
+def test_mood_transitions_across_all_four_states(client):
+    conn = get_connection()
+    try:
+        now = services.now_utc()
+
+        # 1. Happy: fresh seed
+        d1 = services.build_dashboard(conn, now)
+        assert d1["mood"] == "happy"
+
+        # 2. Normal: push one non-critical task to ~85% elapsed (Clean Water Tank: 30d -> 25.5d ago)
+        clean_water_last = services.to_iso(now - timedelta(days=25, hours=12))
+        conn.execute(
+            "UPDATE tasks SET last_cleaned_at = ? WHERE slug = 'clean_water_tank'",
+            (clean_water_last,),
+        )
+        conn.commit()
+        d2 = services.build_dashboard(conn, now)
+        assert d2["mood"] == "normal"
+
+        # 3. Dusty: 1 non-critical task overdue (Drip Tray: 7d -> 9d ago)
+        conn.execute(
+            "UPDATE tasks SET last_cleaned_at = ? WHERE slug = 'drip_tray'",
+            (services.to_iso(now - timedelta(days=9)),),
+        )
+        conn.commit()
+        d3 = services.build_dashboard(conn, now)
+        assert d3["mood"] == "dusty"
+        assert d3["counts"]["overdue"] == 1
+
+        # 4a. Faint via 3+ tasks overdue
+        conn.execute(
+            "UPDATE tasks SET last_cleaned_at = ? WHERE slug IN ('mop_washing_trays', 'side_brush')",
+            (services.to_iso(now - timedelta(days=20)),),
+        )
+        conn.commit()
+        d4 = services.build_dashboard(conn, now)
+        assert d4["mood"] == "faint"
+        assert d4["counts"]["overdue"] >= 3
+
+        # Reset those 3 and verify 4b. Faint via Dirty Water Tank alone overdue
+        conn.execute(
+            "UPDATE tasks SET last_cleaned_at = ? WHERE slug IN ('drip_tray', 'mop_washing_trays', 'side_brush')",
+            (services.to_iso(now),),
+        )
+        conn.execute(
+            "UPDATE tasks SET last_cleaned_at = ? WHERE slug = 'dirty_water_tank'",
+            (services.to_iso(now - timedelta(days=4)),),
+        )
+        conn.commit()
+        d5 = services.build_dashboard(conn, now)
+        assert d5["dirty_water_overdue"] is True
+        assert d5["mood"] == "faint"
+        assert 0 <= d5["health_score"] <= 100
+    finally:
+        conn.close()
+
+
+def test_task_snooze_inventory_settings_and_backup_roundtrip(client):
+    dash = client.get("/api/dashboard").json()
+    dirty_tank = next(
+        t for t in dash["tasks"] if t["slug"] == "dirty_water_tank"
+    )
+
+    # Snooze clean by 2 days & change interval to 4 days
+    patch_res = client.patch(
+        f"/api/tasks/{dirty_tank['id']}",
+        json={"clean_interval_days": 4, "snooze_clean_days": 2},
+    )
+    assert patch_res.status_code == 200
+    updated = next(
+        t for t in patch_res.json()["tasks"] if t["id"] == dirty_tank["id"]
+    )
+    assert updated["clean_cycle"]["interval_days"] == 4
+    assert updated["clean_cycle"]["is_override"] is True
+    assert updated["clean_cycle"]["days_remaining"] >= 4.9
+
+    # Adjust inventory +/-
+    dust_bags = next(i for i in dash["inventory"] if i["slug"] == "dust_bags")
+    inv_res = client.patch(
+        f"/api/inventory/{dust_bags['id']}",
+        json={"delta": -2},
+    )
+    assert inv_res.status_code == 200
+    updated_bags = next(
+        i for i in inv_res.json()["inventory"] if i["id"] == dust_bags["id"]
+    )
+    assert updated_bags["in_stock"] == 1
+    assert updated_bags["is_low_stock"] is True
+
+    # Settings save
+    settings_res = client.post(
+        "/api/settings",
+        json={
+            "robot_name": "Rosie T90",
+            "webhook_url": "https://example.com/hook",
+            "webhook_type": "generic",
+            "notifications_enabled": True,
+        },
+    )
+    assert settings_res.status_code == 200
+    assert settings_res.json()["robot_name"] == "Rosie T90"
+    assert settings_res.json()["notifications_enabled"] is True
+
+    # Export and re-import JSON backup
+    backup = client.get("/api/export").json()
+    assert backup["settings"]["robot_name"] == "Rosie T90"
+
+    # Mutate robot_name, then restore backup
+    client.post("/api/settings", json={"robot_name": "Temp Name"})
+    imp_res = client.post("/api/import", json=backup)
+    assert imp_res.status_code == 200
+    assert imp_res.json()["robot_name"] == "Rosie T90"
+
+
+def test_mascots_endpoint_and_override(client, tmp_path):
+    for mood in ("happy", "normal", "dusty", "faint"):
+        res = client.get(f"/mascots/{mood}.svg")
+        assert res.status_code == 200
+        assert "image/svg+xml" in res.headers["content-type"]
+        assert "no-cache" in res.headers.get("cache-control", "")
+        assert "<svg" in res.text
+
+    assert client.get("/mascots/nonexistent.svg").status_code == 404
+    assert client.get("/mascots/happy.png").status_code == 404
+
+    override_dir = tmp_path / "mascots"
+    override_dir.mkdir(parents=True, exist_ok=True)
+    custom_svg = '<svg xmlns="http://www.w3.org/2000/svg" id="custom-override"></svg>'
+    (override_dir / "happy.svg").write_text(custom_svg, encoding="utf-8")
+
+    override_res = client.get("/mascots/happy.svg")
+    assert override_res.status_code == 200
+    assert "custom-override" in override_res.text
