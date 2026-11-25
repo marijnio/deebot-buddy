@@ -4,7 +4,7 @@ services:
     container_name: deebot-buddy
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8089:8080"
     volumes:
       # Synology NAS persistent SQLite data folder (create /volume1/docker/deebot-buddy/data first)
       - /volume1/docker/deebot-buddy/data:/app/data
