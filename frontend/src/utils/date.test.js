@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getCycleProgressPercent, isSameLocalDay } from './date.js';
+import { getCycleRemainingPercent, isSameLocalDay } from './date.js';
 
 test('isSameLocalDay matches timestamps on the same local calendar day', () => {
   const morning = new Date(2026, 10, 25, 8, 0, 0).toISOString();
@@ -15,58 +15,72 @@ test('isSameLocalDay matches timestamps on the same local calendar day', () => {
   assert.equal(isSameLocalDay('not-a-date', evening), false);
 });
 
-test('getCycleProgressPercent returns 0 when completed today without an override', () => {
+test('getCycleRemainingPercent returns 100 when completed today without an override', () => {
   const ref = new Date(2026, 10, 25, 21, 0, 0);
   const todayMorning = new Date(2026, 10, 25, 8, 0, 0).toISOString();
 
   assert.equal(
-    getCycleProgressPercent(
+    getCycleRemainingPercent(
       { last_at: ref.toISOString(), progress_clamped: 0, is_override: false },
-      ref
-    ),
-    0
-  );
-  assert.equal(
-    getCycleProgressPercent(
-      { last_at: todayMorning, progress_clamped: 16.7, is_override: false },
-      ref
-    ),
-    0
-  );
-});
-
-test('getCycleProgressPercent respects overrides and previous days without a 4% floor', () => {
-  const ref = new Date(2026, 10, 25, 21, 0, 0);
-  const todayMorning = new Date(2026, 10, 25, 8, 0, 0).toISOString();
-  const yesterday = new Date(2026, 10, 24, 21, 0, 0).toISOString();
-
-  assert.equal(
-    getCycleProgressPercent(
-      { last_at: todayMorning, progress_clamped: 100, is_override: true },
       ref
     ),
     100
   );
   assert.equal(
-    getCycleProgressPercent(
-      { last_at: yesterday, progress_clamped: 33.3, is_override: false },
+    getCycleRemainingPercent(
+      { last_at: todayMorning, progress_clamped: 16.7, is_override: false },
       ref
     ),
-    33.3
+    100
   );
+});
+
+test('getCycleRemainingPercent drains over time and respects overrides', () => {
+  const ref = new Date(2026, 10, 25, 21, 0, 0);
+  const todayMorning = new Date(2026, 10, 25, 8, 0, 0).toISOString();
+  const yesterday = new Date(2026, 10, 24, 21, 0, 0).toISOString();
+
   assert.equal(
-    getCycleProgressPercent(
-      { last_at: yesterday, progress_clamped: 0.4, is_override: false },
-      ref
-    ),
-    0.4
-  );
-  assert.equal(
-    getCycleProgressPercent(
-      { last_at: yesterday, progress_clamped: 0, is_override: true },
+    getCycleRemainingPercent(
+      { last_at: todayMorning, progress_clamped: 100, is_override: true },
       ref
     ),
     0
   );
-  assert.equal(getCycleProgressPercent(null, ref), 0);
+  assert.equal(
+    getCycleRemainingPercent(
+      { last_at: yesterday, progress_clamped: 80, is_override: true },
+      ref
+    ),
+    20
+  );
+  assert.equal(
+    getCycleRemainingPercent(
+      { last_at: yesterday, progress_clamped: 33.3, is_override: false },
+      ref
+    ),
+    66.7
+  );
+  assert.equal(
+    getCycleRemainingPercent(
+      { last_at: yesterday, progress_clamped: 0.4, is_override: false },
+      ref
+    ),
+    99.6
+  );
+  assert.equal(
+    getCycleRemainingPercent(
+      { last_at: yesterday, progress_clamped: 0, is_override: true },
+      ref
+    ),
+    100
+  );
+  assert.equal(
+    getCycleRemainingPercent(
+      { last_at: yesterday, progress_clamped: 100, is_override: false },
+      ref
+    ),
+    0
+  );
+  assert.equal(getCycleRemainingPercent(null, ref), 0);
 });

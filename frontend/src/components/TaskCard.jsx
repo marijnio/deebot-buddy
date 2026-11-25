@@ -21,7 +21,7 @@ import {
   Wrench,
   Zap,
 } from 'lucide-react';
-import { formatShortDue, getCycleProgressPercent } from '../utils/date';
+import { formatShortDue, getCycleRemainingPercent } from '../utils/date';
 import { formatInStock } from '../utils/stock';
 
 const ICON_MAP = {
@@ -62,7 +62,7 @@ function CycleBar({ label, cycle }) {
   if (!cycle) return null;
   const barColor = getBarColor(cycle.status);
   const dueText = formatShortDue(cycle.days_remaining);
-  const progressPercent = getCycleProgressPercent(cycle);
+  const remainingPercent = getCycleRemainingPercent(cycle);
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-xs">
@@ -73,31 +73,36 @@ function CycleBar({ label, cycle }) {
           </span>
         </span>
         <span
-          className={`font-semibold ${cycle.status === 'overdue'
+          className={`font-semibold ${
+            cycle.status === 'overdue'
               ? 'text-rose-600 dark:text-rose-400'
               : cycle.status === 'due_soon'
                 ? 'text-amber-600 dark:text-amber-400'
                 : 'text-emerald-600 dark:text-emerald-400'
-            }`}
+          }`}
         >
           {dueText}
         </span>
       </div>
+      <div
+        role="progressbar"
+        aria-label={`${label} remaining`}
+        aria-valuenow={Math.round(remainingPercent)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        className={`h-2 w-full overflow-hidden rounded-full ${
+          cycle.status === 'overdue'
+            ? 'bg-rose-100 dark:bg-rose-950/50'
+            : 'bg-stone-100 dark:bg-slate-800'
+        }`}
+      >
         <div
-          role="progressbar"
-          aria-label={`${label} progress`}
-          aria-valuenow={Math.round(progressPercent)}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          className="h-2 w-full overflow-hidden rounded-full bg-stone-100 dark:bg-slate-800"
-        >
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${barColor}`}
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
+          className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+          style={{ width: `${remainingPercent}%` }}
+        />
       </div>
-      );
+    </div>
+  );
 }
 
       export default function TaskCard({

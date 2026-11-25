@@ -86,12 +86,12 @@ export function isSameLocalDay(isoString, referenceDate = new Date()) {
   );
 }
 
-export function getCycleProgressPercent(cycle, referenceDate = new Date()) {
+export function getCycleRemainingPercent(cycle, referenceDate = new Date()) {
   if (!cycle) return 0;
   if (!cycle.is_override && isSameLocalDay(cycle.last_at, referenceDate)) {
-    return 0;
+    return 100;
   }
   const raw = Number(cycle.progress_clamped ?? 0);
-  if (!Number.isFinite(raw) || raw <= 0) return 0;
-  return Math.min(100, raw);
+  const elapsed = !Number.isFinite(raw) ? 0 : Math.min(100, Math.max(0, raw));
+  return Math.round((100 - elapsed) * 10) / 10;
 }
