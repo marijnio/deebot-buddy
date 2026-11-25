@@ -74,3 +74,24 @@ export function toLocalDatetimeInputValue(date = new Date()) {
     date.getHours()
   )}:${pad(date.getMinutes())}`;
 }
+
+export function isSameLocalDay(isoString, referenceDate = new Date()) {
+  if (!isoString) return false;
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return false;
+  return (
+    date.getFullYear() === referenceDate.getFullYear() &&
+    date.getMonth() === referenceDate.getMonth() &&
+    date.getDate() === referenceDate.getDate()
+  );
+}
+
+export function getCycleProgressPercent(cycle, referenceDate = new Date()) {
+  if (!cycle) return 0;
+  if (!cycle.is_override && isSameLocalDay(cycle.last_at, referenceDate)) {
+    return 0;
+  }
+  const raw = Number(cycle.progress_clamped ?? 0);
+  if (!Number.isFinite(raw) || raw <= 0) return 0;
+  return Math.min(100, raw);
+}
