@@ -849,6 +849,8 @@ def update_settings(
         updates["pushover_token"] = req.pushover_token.strip()
     if req.pushover_user is not None:
         updates["pushover_user"] = req.pushover_user.strip()
+    if req.app_url is not None:
+        updates["app_url"] = req.app_url.strip()
     if req.notifications_enabled is not None:
         updates["notifications_enabled"] = "true" if req.notifications_enabled else "false"
 
@@ -909,6 +911,11 @@ async def send_webhook_notification(
         if override and override.pushover_user is not None
         else settings.get("pushover_user", "")
     )
+    app_url = (
+        override.app_url.strip()
+        if override and override.app_url is not None
+        else settings.get("app_url", "").strip()
+    )
 
     overdue_tasks = [
         t["name"] for t in dashboard["tasks"] if t["overall_status"] == "overdue"
@@ -932,66 +939,76 @@ async def send_webhook_notification(
     async with httpx.AsyncClient(timeout=10.0) as client:
         if provider == "discord":
             color = 0xEF4444 if overdue_tasks and not is_test else 0x10B981
+            embed: dict[str, Any] = {
+                "title": title,
+                "description": body,
+                "color": color,
+                "fields": [
+                    {
+                        "name": "Health Score",
+                        "value": f"{health_score}%",
+                        "inline": True,
+                    },
+                    {
+                        "name": "Mood",
+                        "value": mood_label,
+                        "inline": True,
+                    },
+                    {
+                        "name": "Overdue Count",
+                        "value": str(len(overdue_tasks)),
+                        "inline": True,
+                    },
+                ],
+            }
+            if app_url:
+                embed["url"] = app_url
             payload = {
                 "username": "Deebot Buddy",
                 "content": f"**{title}**\n{body}",
-                "embeds": [
-                    {
-                        "title": title,
-                        "description": body,
-                        "color": color,
-                        "fields": [
-                            {
-                                "name": "Health Score",
-                                "value": f"{health_score}%",
-                                "inline": True,
-                            },
-                            {
-                                "name": "Mood",
-                                "value": mood_label,
-                                "inline": True,
-                            },
-                            {
-                                "name": "Overdue Count",
-                                "value": str(len(overdue_tasks)),
-                                "inline": True,
-                            },
-                        ],
-                    }
-                ],
+                "embeds": [embed],
             }
             resp = await client.post(url, json=payload)
         elif provider == "pushover":
-            resp = await client.post(
-                url,
-                data={
-                    "token": pushover_token,
-                    "user": pushover_user,
-                    "title": title,
-                    "message": body,
-                },
-            )
+            pushover_data: dict[str, str] = {
+                "token": pushover_token,
+                "user": pushover_user,
+                "title": title,
+                "message": body,
+            }
+            if app_url:
+                pushover_data["url"] = app_url
+                pushover_data["url_title"] = f"Open {robot_name}"
+            resp = await client.post(url, data=pushover_data)
         elif provider == "gotify":
-            resp = await client.post(
-                url,
-                json={"title": title, "message": body, "priority": 5},
-            )
+            gotify_payload: dict[str, Any] = {
+                "title": title,
+                "message": body,
+                "priority": 5,
+            }
+            if app_url:
+                gotify_payload["extras"] = {
+                    "client::notification": {
+                        "click": {"url": app_url},
+                    }
+                }
+            resp = await client.post(url, json=gotify_payload)
         else:
-            resp = await client.post(
-                url,
-                json={
-                    "source": "deebot-buddy",
-                    "is_test": is_test,
-                    "robot_name": robot_name,
-                    "title": title,
-                    "message": body,
-                    "mood": dashboard["mood"],
-                    "mood_label": mood_label,
-                    "health_score": health_score,
-                    "overdue_tasks": overdue_tasks,
-                    "counts": dashboard["counts"],
-                },
-            )
+            generic_payload: dict[str, Any] = {
+                "source": "deebot-buddy",
+                "is_test": is_test,
+                "robot_name": robot_name,
+                "title": title,
+                "message": body,
+                "mood": dashboard["mood"],
+                "mood_label": mood_label,
+                "health_score": health_score,
+                "overdue_tasks": overdue_tasks,
+                "counts": dashboard["counts"],
+            }
+            if app_url:
+                generic_payload["url"] = app_url
+            resp = await client.post(url, json=generic_payload)
 
     if resp.status_code >= 400:
         raise HTTPException(

@@ -270,5 +270,6 @@ DEFAULT_SETTINGS = {
     "webhook_type": "auto",
     "pushover_token": "",
     "pushover_user": "",
+    "app_url": "",
     "notifications_enabled": "false",
 }

@@ -28,6 +28,7 @@ export default function SettingsModal({
     webhook_type: 'auto',
     pushover_token: '',
     pushover_user: '',
+    app_url: '',
     notifications_enabled: false,
   });
   const [loading, setLoading] = useState(false);
@@ -56,6 +57,7 @@ export default function SettingsModal({
           webhook_type: data.webhook_type || 'auto',
           pushover_token: data.pushover_token || '',
           pushover_user: data.pushover_user || '',
+          app_url: data.app_url || '',
           notifications_enabled: Boolean(data.notifications_enabled),
         });
       })
@@ -90,6 +92,7 @@ export default function SettingsModal({
         webhook_type: form.webhook_type,
         pushover_token: form.pushover_token,
         pushover_user: form.pushover_user,
+        app_url: form.app_url,
       });
       onNotify(`Test webhook sent via ${res.provider} (HTTP ${res.status_code})`);
     } catch (err) {
@@ -311,6 +314,32 @@ export default function SettingsModal({
                           />
                         </div>
                       )}
+
+                      <label className="block text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium text-stone-600 dark:text-slate-300">
+                            App URL (tap notification to open)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setForm({ ...form, app_url: window.location.origin })
+                            }
+                            className="text-[11px] font-semibold text-teal-600 hover:underline dark:text-teal-400"
+                          >
+                            Use current URL
+                          </button>
+                        </div>
+                        <input
+                          type="url"
+                          placeholder="https://deebot.yourdomain.com"
+                          value={form.app_url}
+                          onChange={(e) =>
+                            setForm({ ...form, app_url: e.target.value })
+                          }
+                          className="mt-1 w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
+                        />
+                      </label>
 
                       <div className="flex items-center justify-between pt-1">
                         <span className="text-[11px] text-stone-500 dark:text-slate-400">

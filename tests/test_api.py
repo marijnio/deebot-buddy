@@ -546,3 +546,73 @@ def test_custom_robot_name_in_dashboard_and_mood_subtitle(client):
     assert dash["robot_name"] == "Sparky"
     assert dash["mood"] == "happy"
     assert "Sparky" in dash["mood_subtitle"]
+
+
+def test_webhook_app_url_payloads(client, monkeypatch):
+    import httpx
+
+    app_url = "https://deebot.example.com"
+    save_res = client.post("/api/settings", json={"app_url": f"  {app_url}  "})
+    assert save_res.status_code == 200
+    assert save_res.json()["app_url"] == app_url
+    assert client.get("/api/settings").json()["app_url"] == app_url
+
+    captured: list[dict] = []
+
+    class DummyResponse:
+        status_code = 200
+        text = "ok"
+
+    async def fake_post(self, url, **kwargs):
+        captured.append({"url": url, **kwargs})
+        return DummyResponse()
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+    # Gotify with saved app_url -> includes client::notification click url
+    gotify_url = "https://gotify.example.com/message?token=secret"
+    r1 = client.post(
+        "/api/settings/test-webhook",
+        json={"webhook_url": gotify_url},
+    )
+    assert r1.status_code == 200
+    assert captured[-1]["json"]["extras"]["client::notification"]["click"]["url"] == app_url
+
+    # Gotify with empty app_url override -> omits extras
+    r2 = client.post(
+        "/api/settings/test-webhook",
+        json={"webhook_url": gotify_url, "app_url": ""},
+    )
+    assert r2.status_code == 200
+    assert "extras" not in captured[-1]["json"]
+
+    # Discord -> sets embed url
+    discord_url = "https://discord.com/api/webhooks/123/abc"
+    r3 = client.post(
+        "/api/settings/test-webhook",
+        json={"webhook_url": discord_url, "app_url": app_url},
+    )
+    assert r3.status_code == 200
+    assert captured[-1]["json"]["embeds"][0]["url"] == app_url
+
+    # Pushover -> sets url and url_title
+    r4 = client.post(
+        "/api/settings/test-webhook",
+        json={
+            "webhook_url": "https://api.pushover.net/1/messages.json",
+            "pushover_token": "tok",
+            "pushover_user": "usr",
+            "app_url": app_url,
+        },
+    )
+    assert r4.status_code == 200
+    assert captured[-1]["data"]["url"] == app_url
+    assert "url_title" in captured[-1]["data"]
+
+    # Generic / Home Assistant -> sets top-level url
+    r5 = client.post(
+        "/api/settings/test-webhook",
+        json={"webhook_url": "https://ha.example.com/api/webhook/deebot", "app_url": app_url},
+    )
+    assert r5.status_code == 200
+    assert captured[-1]["json"]["url"] == app_url

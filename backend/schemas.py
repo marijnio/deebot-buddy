@@ -49,6 +49,7 @@ class SettingsUpdateRequest(BaseModel):
     ] = None
     pushover_token: Optional[str] = Field(default=None, max_length=200)
     pushover_user: Optional[str] = Field(default=None, max_length=200)
+    app_url: Optional[str] = Field(default=None, max_length=1000)
     notifications_enabled: Optional[bool] = None
 
 
@@ -59,6 +60,7 @@ class TestWebhookRequest(BaseModel):
     ] = None
     pushover_token: Optional[str] = Field(default=None, max_length=200)
     pushover_user: Optional[str] = Field(default=None, max_length=200)
+    app_url: Optional[str] = Field(default=None, max_length=1000)
 
 
 class BackupPayload(BaseModel):
